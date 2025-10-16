@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>绩效数据分析系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  
+  <!-- Tailwind 配置 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            secondary: '#36CFC9',
+            success: '#52C41A',
+            warning: '#FAAD14',
+            danger: '#FF4D4F',
+            gray: {
+              100: '#F5F7FA',
+              200: '#E4E6EB',
+              300: '#C9CDD4',
+              400: '#86909C',
+              500: '#4E5969',
+              600: '#272E3B',
+              700: '#1D2129',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+          boxShadow: {
+            'card': '0 2px 8px rgba(0, 0, 0, 0.08)',
+            'card-hover': '0 4px 16px rgba(0, 0, 0, 0.12)',
+          }
+        },
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .scrollbar-thin {
+        scrollbar-width: thin;
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+      .transition-height {
+        transition: max-height 0.3s ease-in-out;
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-700 min-h-screen">
+  <!-- 顶部导航 -->
+  <header class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-2">
+        <i class="fa fa-bar-chart text-primary text-2xl"></i>
+        <h1 class="text-xl font-bold text-gray-700">绩效数据分析系统</h1>
+      </div>
+      <div class="text-sm text-gray-500">
+        <span id="lastImportInfo">上次导入：暂无记录</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="container mx-auto px-4 py-6">
+    <!-- 导入区域 -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <!-- 绩效数据表导入 -->
+      <div class="bg-white rounded-lg shadow-card p-6 transition-all duration-300 hover:shadow-card-hover">
+        <h2 class="text-lg font-semibold mb-4 flex items-center">
+          <i class="fa fa-file-excel-o text-success mr-2"></i>绩效数据表导入
+        </h2>
+        
+        <div class="mb-4">
+          <button id="downloadPerformanceTemplate" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm flex items-center transition-colors">
+            <i class="fa fa-download mr-2"></i>下载模板
+          </button>
+        </div>
+        
+        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors cursor-pointer" id="performanceDropArea">
+          <i class="fa fa-cloud-upload text-4xl text-gray-400 mb-2"></i>
+          <p class="text-gray-500 mb-2">拖放绩效数据表格到此处，或点击上传</p>
+          <p class="text-xs text-gray-400">支持 .xlsx 格式文件</p>
+          <input type="file" id="performanceFileInput" accept=".xlsx" class="hidden">
+        </div>
+        
+        <div id="weekInputContainer" class="mt-4 hidden">
+          <label for="weekInput" class="block text-sm font-medium text-gray-700 mb-1">时间周</label>
+          <div class="flex items-center">
+            <input type="text" id="weekInput" placeholder="格式：YXXWXX（例如：Y23W05）" 
+                  class="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+            <button id="confirmWeekBtn" class="ml-2 bg-primary text-white px-4 py-2 rounded-md text-sm hover:bg-primary/90 transition-colors">
+              确认上传
+            </button>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">提示：若时间周已存在，将替换原有数据</p>
+        </div>
+        
+        <div id="performanceUploadStatus" class="mt-4 hidden"></div>
+      </div>
+      
+      <!-- 员工花名单导入 -->
+      <div class="bg-white rounded-lg shadow-card p-6 transition-all duration-300 hover:shadow-card-hover">
+        <h2 class="text-lg font-semibold mb-4 flex items-center">
+          <i class="fa fa-users text-primary mr-2"></i>员工花名单导入
+        </h2>
+        
+        <div class="mb-4 flex flex-wrap gap-2">
+          <button id="downloadStaffTemplate" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm flex items-center transition-colors">
+            <i class="fa fa-download mr-2"></i>下载模板
+          </button>
+          <button id="downloadCurrentStaffBtn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md text-sm flex items-center transition-colors hidden">
+            <i class="fa fa-download mr-2"></i>下载当前花名单
+          </button>
+        </div>
+        
+        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors cursor-pointer" id="staffDropArea">
+          <i class="fa fa-cloud-upload text-4xl text-gray-400 mb-2"></i>
+          <p class="text-gray-500 mb-2">拖放员工花名单到此处，或点击上传</p>
+          <p class="text-xs text-gray-400">支持 .xlsx 格式文件</p>
+          <input type="file" id="staffFileInput" accept=".xlsx" class="hidden">
+        </div>
+        
+        <div id="staffUploadStatus" class="mt-4 hidden"></div>
+        
+        <!-- 花名单更新时间显示 -->
+        <div id="staffLastUpdate" class="mt-3 text-sm text-gray-500 italic">
+          最新更新时间：暂无记录
+        </div>
+      </div>
+    </section>
+    
+    <!-- 已导入绩效数据列表 -->
+    <section class="bg-white rounded-lg shadow-card p-6 mb-8">
+      <h2 class="text-lg font-semibold mb-4 flex items-center">
+        <i class="fa fa-history text-gray-600 mr-2"></i>已导入绩效数据
+      </h2>
+      
+      <div id="performanceDataList" class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead>
+            <tr>
+              <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">时间周</th>
+              <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">数据量</th>
+              <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">导入时间</th>
+              <th class="px-4 py-3 bg-gray-50 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+            </tr>
+          </thead>
+          <tbody id="performanceTableBody" class="bg-white divide-y divide-gray-200">
+            <tr>
+              <td colspan="4" class="px-4 py-8 text-center text-gray-500">暂无导入数据</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    
+    <!-- 目标值设置 -->
+    <section class="bg-white rounded-lg shadow-card p-6 mb-8">
+      <h2 class="text-lg font-semibold mb-4 flex items-center">
+        <i class="fa fa-bullseye text-warning mr-2"></i>目标值设置
+      </h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label for="satisfactionTarget" class="block text-sm font-medium text-gray-700 mb-1">满意度_剔除R目标值</label>
+          <div class="flex items-center">
+            <input type="number" id="satisfactionTarget" value="83.5" min="0" max="100" step="0.1"
+                  class="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+            <span class="ml-2 text-gray-500">%</span>
+          </div>
+        </div>
+        
+        <div>
+          <label for="resolutionTarget" class="block text-sm font-medium text-gray-700 mb-1">解决率_剔除R目标值</label>
+          <div class="flex items-center">
+            <input type="number" id="resolutionTarget" value="70" min="0" max="100" step="0.1"
+                  class="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+            <span class="ml-2 text-gray-500">%</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="mt-6">
+        <button id="generateDataBtn" class="bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-md text-sm font-medium transition-colors flex items-center">
+          <i class="fa fa-calculator mr-2"></i>生成绩效数据
+        </button>
+      </div>
+    </section>
+    
+    <!-- 生成结果展示 -->
+    <section class="bg-white rounded-lg shadow-card p-6 mb-8" id="resultSection" style="display: none;">
+      <div class="flex flex-col md:flex-row md:items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold flex items-center">
+          <i class="fa fa-table text-success mr-2"></i>绩效分析结果
+        </h2>
+        
+        <div class="mt-3 md:mt-0">
+          <button id="exportResultBtn" class="bg-success hover:bg-success/90 text-white px-4 py-2 rounded-md text-sm flex items-center transition-colors">
+            <i class="fa fa-download mr-2"></i>导出筛选后数据
+          </button>
+        </div>
+      </div>
+      
+      <!-- 筛选区域 -->
+      <div class="mb-6 border rounded-lg p-4">
+        <h3 class="text-sm font-semibold mb-3 flex items-center">
+          <i class="fa fa-filter mr-2 text-gray-500"></i>筛选条件
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label for="deptFilter" class="block text-xs text-gray-600 mb-1">五级部门</label>
+            <input type="text" id="deptFilter" value="SOHO运营四组京喜在线一组" placeholder="请输入部门关键词" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+          </div>
+          <div>
+            <label for="erpFilter" class="block text-xs text-gray-600 mb-1">ERP账号</label>
+            <input type="text" id="erpFilter" placeholder="请输入ERP关键词" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+          </div>
+          <div>
+            <label for="nameFilter" class="block text-xs text-gray-600 mb-1">姓名</label>
+            <input type="text" id="nameFilter" placeholder="请输入姓名关键词" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+          </div>
+          <div>
+            <label for="groupFilter" class="block text-xs text-gray-600 mb-1">组别</label>
+            <input type="text" id="groupFilter" placeholder="请输入组别关键词" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+          </div>
+          <div>
+            <label for="vSuggestionFilter" class="block text-xs text-gray-600 mb-1">V数建议</label>
+            <select id="vSuggestionFilter" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+              <option value="">全部</option>
+              <option value="建议升V">建议升V</option>
+              <option value="建议保持">建议保持</option>
+              <option value="建议降V">建议降V</option>
+            </select>
+          </div>
+          <div class="flex items-end gap-2">
+            <button id="filterBtn" class="flex-1 bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-md text-sm transition-colors">
+              应用筛选
+            </button>
+            <button id="resetFilterBtn" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-sm transition-colors">
+              重置
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 排序区域 -->
+      <div class="mb-4 flex flex-wrap items-center gap-4">
+        <div class="flex items-center">
+          <label for="sortField" class="mr-2 text-sm font-medium text-gray-700">排序字段：</label>
+          <select id="sortField" class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+            <!-- 动态生成排序选项 -->
+          </select>
+        </div>
+        <div class="flex items-center">
+          <label for="sortDirection" class="mr-2 text-sm font-medium text-gray-700">排序方向：</label>
+          <select id="sortDirection" class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+            <option value="desc">从大到小</option>
+            <option value="asc">从小到大</option>
+          </select>
+        </div>
+        <button id="sortBtn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-sm transition-colors">
+          应用排序
+        </button>
+      </div>
+      
+      <div class="mb-4 text-sm text-gray-500">
+        <span>显示最近 <strong id="visibleWeeksCount">5</strong> 周数据，共 <strong id="totalWeeksCount">0</strong> 周</span>
+        <button id="toggleWeeksBtn" class="text-primary ml-2 hover:underline">
+          <i class="fa fa-chevron-down mr-1"></i>展开全部
+        </button>
+      </div>
+      
+      <div class="overflow-x-auto scrollbar-thin" style="max-height: 600px;">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="sticky top-0 bg-gray-50">
+            <tr id="resultTableHeader">
+              <!-- 表头将通过JS动态生成 -->
+            </tr>
+          </thead>
+          <tbody id="resultTableBody" class="bg-white divide-y divide-gray-200">
+            <!-- 表格内容将通过JS动态生成 -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="bg-white border-t border-gray-200 py-4">
+    <div class="container mx-auto px-4 text-center text-sm text-gray-500">
+      <p>绩效数据分析系统 &copy; 2023</p>
+    </div>
+  </footer>
+
+  <!-- 通知提示组件 -->
+  <div id="notification" class="fixed bottom-4 right-4 px-4 py-3 rounded-md shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 flex items-center max-w-xs"></div>
+
+  <script>
+    // 全局数据存储
+    const appData = {
+      performanceData: {}, // 按时间周存储的绩效数据 { "Y23W05": { data: [], timestamp: 123456789 } }
+      staffData: [],       // 员工花名单数据
+      staffLastUpdate: 0,  // 员工花名单最后更新时间戳
+      resultData: [],      // 生成的结果数据
+      filteredResultData: [], // 筛选后的结果数据
+      resultHeaders: [],   // 结果数据的表头
+      latestWeek: '',      // 最新的时间周，用于判断V数建议和默认排序
+      currentWeeks: []     // 当前的时间周列表
+    };
+
+    // DOM 元素
+    const elements = {
+      // 绩效数据导入
+      performanceDropArea: document.getElementById('performanceDropArea'),
+      performanceFileInput: document.getElementById('performanceFileInput'),
+      weekInputContainer: document.getElementById('weekInputContainer'),
+      weekInput: document.getElementById('weekInput'),
+      confirmWeekBtn: document.getElementById('confirmWeekBtn'),
+      performanceUploadStatus: document.getElementById('performanceUploadStatus'),
+      downloadPerformanceTemplate: document.getElementById('downloadPerformanceTemplate'),
+      
+      // 员工花名单导入
+      staffDropArea: document.getElementById('staffDropArea'),
+      staffFileInput: document.getElementById('staffFileInput'),
+      staffUploadStatus: document.getElementById('staffUploadStatus'),
+      downloadStaffTemplate: document.getElementById('downloadStaffTemplate'),
+      downloadCurrentStaffBtn: document.getElementById('downloadCurrentStaffBtn'),
+      staffLastUpdate: document.getElementById('staffLastUpdate'),
+      
+      // 已导入数据列表
+      performanceTableBody: document.getElementById('performanceTableBody'),
+      lastImportInfo: document.getElementById('lastImportInfo'),
+      
+      // 目标值设置
+      satisfactionTarget: document.getElementById('satisfactionTarget'),
+      resolutionTarget: document.getElementById('resolutionTarget'),
+      generateDataBtn: document.getElementById('generateDataBtn'),
+      
+      // 结果展示
+      resultSection: document.getElementById('resultSection'),
+      resultTableHeader: document.getElementById('resultTableHeader'),
+      resultTableBody: document.getElementById('resultTableBody'),
+      exportResultBtn: document.getElementById('exportResultBtn'),
+      visibleWeeksCount: document.getElementById('visibleWeeksCount'),
+      totalWeeksCount: document.getElementById('totalWeeksCount'),
+      toggleWeeksBtn: document.getElementById('toggleWeeksBtn'),
+      
+      // 排序相关
+      sortField: document.getElementById('sortField'),
+      sortDirection: document.getElementById('sortDirection'),
+      sortBtn: document.getElementById('sortBtn'),
+      
+      // 筛选相关
+      deptFilter: document.getElementById('deptFilter'),
+      erpFilter: document.getElementById('erpFilter'),
+      nameFilter: document.getElementById('nameFilter'),
+      groupFilter: document.getElementById('groupFilter'),
+      vSuggestionFilter: document.getElementById('vSuggestionFilter'),
+      filterBtn: document.getElementById('filterBtn'),
+      resetFilterBtn: document.getElementById('resetFilterBtn'),
+      
+      // 通知组件
+      notification: document.getElementById('notification')
+    };
+
+    // 初始化应用
+    function initApp() {
+      // 从本地存储加载数据
+      loadFromLocalStorage();
+      // 更新UI显示
+      updatePerformanceDataList();
+      updateLastImportInfo();
+      updateStaffLastUpdate();
+      // 绑定事件监听
+      bindEventListeners();
+    }
+
+    // 从本地存储加载数据
+    function loadFromLocalStorage() {
+      const savedPerformance = localStorage.getItem('performanceData');
+      const savedStaff = localStorage.getItem('staffData');
+      const savedStaffLastUpdate = localStorage.getItem('staffLastUpdate');
+      
+      if (savedPerformance) {
+        appData.performanceData = JSON.parse(savedPerformance);
+      }
+      
+      if (savedStaff) {
+        appData.staffData = JSON.parse(savedStaff);
+      }
+      
+      if (savedStaffLastUpdate) {
+        appData.staffLastUpdate = parseInt(savedStaffLastUpdate);
+      }
+    }
+
+    // 保存数据到本地存储
+    function saveToLocalStorage() {
+      localStorage.setItem('performanceData', JSON.stringify(appData.performanceData));
+      localStorage.setItem('staffData', JSON.stringify(appData.staffData));
+      localStorage.setItem('staffLastUpdate', appData.staffLastUpdate.toString());
+      updateLastImportInfo();
+      updateStaffLastUpdate();
+    }
+
+    // 更新最后导入信息
+    function updateLastImportInfo() {
+      const weeks = Object.keys(appData.performanceData);
+      if (weeks.length === 0) {
+        elements.lastImportInfo.textContent = '上次导入：暂无记录';
+        return;
+      }
+      
+      // 找到最新导入的时间周
+      let latestWeek = '';
+      let latestTime = 0;
+      
+      for (const week of weeks) {
+        if (appData.performanceData[week].timestamp > latestTime) {
+          latestTime = appData.performanceData[week].timestamp;
+          latestWeek = week;
+        }
+      }
+      
+      const date = new Date(latestTime);
+      const formattedDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+      
+      elements.lastImportInfo.textContent = `上次导入：${latestWeek}（${formattedDate}）`;
+    }
+
+    // 更新员工花名单最后更新时间显示
+    function updateStaffLastUpdate() {
+      const staffLastUpdateEl = elements.staffLastUpdate;
+      const downloadBtn = elements.downloadCurrentStaffBtn;
+      
+      if (appData.staffLastUpdate > 0 && appData.staffData.length > 0) {
+        const date = new Date(appData.staffLastUpdate);
+        const formattedDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        staffLastUpdateEl.textContent = `最新更新时间：${formattedDate}`;
+        downloadBtn.classList.remove('hidden');
+      } else {
+        staffLastUpdateEl.textContent = '最新更新时间：暂无记录';
+        downloadBtn.classList.add('hidden');
+      }
+    }
+
+    // 绑定事件监听
+    function bindEventListeners() {
+      // 绩效数据拖放上传
+      elements.performanceDropArea.addEventListener('click', () => {
+        elements.performanceFileInput.click();
+      });
+      
+      elements.performanceFileInput.addEventListener('change', handlePerformanceFileSelect);
+      
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        elements.performanceDropArea.addEventListener(eventName, preventDefaults, false);
+      });
+      
+      function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      
+      ['dragenter', 'dragover'].forEach(eventName => {
+        elements.performanceDropArea.addEventListener(eventName, highlight, false);
+      });
+      
+      ['dragleave', 'drop'].forEach(eventName => {
+        elements.performanceDropArea.addEventListener(eventName, unhighlight, false);
+      });
+      
+      function highlight() {
+        elements.performanceDropArea.classList.add('border-primary', 'bg-primary/5');
+      }
+      
+      function unhighlight() {
+        elements.performanceDropArea.classList.remove('border-primary', 'bg-primary/5');
+      }
+      
+      elements.performanceDropArea.addEventListener('drop', handlePerformanceDrop, false);
+      
+      // 确认时间周并上传
+      elements.confirmWeekBtn.addEventListener('click', processPerformanceData);
+      
+      // 员工花名单拖放上传
+      elements.staffDropArea.addEventListener('click', () => {
+        elements.staffFileInput.click();
+      });
+      
+      elements.staffFileInput.addEventListener('change', handleStaffFileSelect);
+      
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        elements.staffDropArea.addEventListener(eventName, preventDefaults, false);
+      });
+      
+      ['dragenter', 'dragover'].forEach(eventName => {
+        elements.staffDropArea.addEventListener(eventName, highlightStaffArea, false);
+      });
+      
+      ['dragleave', 'drop'].forEach(eventName => {
+        elements.staffDropArea.addEventListener(eventName, unhighlightStaffArea, false);
+      });
+      
+      function highlightStaffArea() {
+        elements.staffDropArea.classList.add('border-primary', 'bg-primary/5');
+      }
+      
+      function unhighlightStaffArea() {
+        elements.staffDropArea.classList.remove('border-primary', 'bg-primary/5');
+      }
+      
+      elements.staffDropArea.addEventListener('drop', handleStaffDrop, false);
+      
+      // 下载模板和当前花名单
+      elements.downloadPerformanceTemplate.addEventListener('click', downloadPerformanceTemplate);
+      elements.downloadStaffTemplate.addEventListener('click', downloadStaffTemplate);
+      elements.downloadCurrentStaffBtn.addEventListener('click', downloadCurrentStaff);
+      
+      // 生成数据
+      elements.generateDataBtn.addEventListener('click', generateResultData);
+      
+      // 导出结果
+      elements.exportResultBtn.addEventListener('click', exportResultData);
+      
+      // 切换周数据显示
+      elements.toggleWeeksBtn.addEventListener('click', toggleWeeksDisplay);
+      
+      // 排序相关
+      elements.sortBtn.addEventListener('click', applySort);
+      
+      // 筛选相关
+      elements.filterBtn.addEventListener('click', applyFilter);
+      elements.resetFilterBtn.addEventListener('click', resetFilter);
+    }
+
+    // 处理绩效数据文件拖放
+    function handlePerformanceDrop(e) {
+      const dt = e.dataTransfer;
+      const file = dt.files[0];
+      if (file) {
+        handlePerformanceFile(file);
+      }
+    }
+
+    // 处理绩效数据文件选择
+    function handlePerformanceFileSelect(e) {
+      const file = e.target.files[0];
+      if (file) {
+        handlePerformanceFile(file);
+      }
+    }
+
+    // 处理绩效数据文件
+    let currentPerformanceFile = null;
+    function handlePerformanceFile(file) {
+      if (!file.name.endsWith('.xlsx')) {
+        showNotification('请上传.xlsx格式的文件', 'error');
+        return;
+      }
+      
+      currentPerformanceFile = file;
+      
+      // 显示时间周输入框
+      elements.weekInputContainer.classList.remove('hidden');
+      elements.weekInput.focus();
+      
+      // 显示上传状态
+      elements.performanceUploadStatus.classList.remove('hidden');
+      elements.performanceUploadStatus.innerHTML = `
+        <div class="text-sm text-gray-600">已选择文件：${file.name}</div>
+      `;
+    }
+
+    // 处理员工花名单文件拖放
+    function handleStaffDrop(e) {
+      const dt = e.dataTransfer;
+      const file = dt.files[0];
+      if (file) {
+        handleStaffFile(file);
+      }
+    }
+
+    // 处理员工花名单文件选择
+    function handleStaffFileSelect(e) {
+      const file = e.target.files[0];
+      if (file) {
+        handleStaffFile(file);
+      }
+    }
+
+    // 处理员工花名单文件
+    function handleStaffFile(file) {
+      if (!file.name.endsWith('.xlsx')) {
+        showNotification('请上传.xlsx格式的文件', 'error');
+        return;
+      }
+      
+      const reader = new FileReader();
+      
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          
+          // 验证表头 - 姓名、ERP账号、组别
+          if (jsonData.length > 0) {
+            const keys = Object.keys(jsonData[0]);
+            const requiredHeaders = ['姓名', 'ERP账号', '组别'];
+            const missingHeaders = requiredHeaders.filter(header => !keys.includes(header));
+            
+            if (missingHeaders.length > 0) {
+              showNotification(`员工花名单格式不正确，缺少表头：${missingHeaders.join(', ')}`, 'error');
+              return;
+            }
+          }
+          
+          appData.staffData = jsonData;
+          appData.staffLastUpdate = new Date().getTime(); // 更新最后更新时间戳
+          saveToLocalStorage();
+          
+          showNotification(`员工花名单导入成功，共 ${jsonData.length} 条记录`, 'success');
+          
+          // 更新上传状态
+          elements.staffUploadStatus.classList.remove('hidden');
+          elements.staffUploadStatus.innerHTML = `
+            <div class="text-sm text-success flex items-center">
+              <i class="fa fa-check-circle mr-1"></i> 导入成功：${file.name}（${jsonData.length}条记录）
+            </div>
+          `;
+        } catch (error) {
+          console.error('处理员工花名单出错：', error);
+          showNotification('文件解析错误，请检查文件格式', 'error');
+        }
+      };
+      
+      reader.readAsArrayBuffer(file);
+    }
+
+    // 下载当前员工花名单
+    function downloadCurrentStaff() {
+      if (appData.staffData.length === 0) {
+        showNotification('没有可下载的员工花名单数据', 'warning');
+        return;
+      }
+      
+      // 创建工作簿
+      const worksheet = XLSX.utils.json_to_sheet(appData.staffData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '员工花名单');
+      
+      // 生成文件名（包含最后更新时间）
+      const date = new Date(appData.staffLastUpdate);
+      const formattedDate = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
+      const fileName = `员工花名单_${formattedDate}.xlsx`;
+      
+      XLSX.writeFile(workbook, fileName);
+      showNotification('员工花名单下载成功', 'success');
+    }
+
+    // 处理绩效数据上传
+    function processPerformanceData() {
+      const weekValue = elements.weekInput.value.trim();
+      
+      // 验证时间周格式
+      if (!/^Y\d{2}W\d{2}$/.test(weekValue)) {
+        showNotification('时间周格式不正确，请使用YXXWXX格式（例如：Y23W05）', 'error');
+        elements.weekInput.focus();
+        return;
+      }
+      
+      if (!currentPerformanceFile) {
+        showNotification('请先选择绩效数据文件', 'error');
+        return;
+      }
+      
+      const reader = new FileReader();
+      
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          
+          // 验证表头
+          if (jsonData.length > 0) {
+            const requiredHeaders = [
+              '五级部门', '新老员工', 'ERP账号', '客服账号', '接待量', 
+              '满意度_剔除R', '解决率_剔除R',
+              '满意量_剔除R', '评价量_剔除R', '已解决量_剔除R', '解决率总评价量_剔除R'
+            ];
+            
+            const keys = Object.keys(jsonData[0]);
+            const missingHeaders = requiredHeaders.filter(header => !keys.includes(header));
+            
+            if (missingHeaders.length > 0) {
+              showNotification(`绩效数据表格式不正确，缺少表头：${missingHeaders.join(', ')}`, 'error');
+              return;
+            }
+          }
+          
+          // 保存数据
+          appData.performanceData[weekValue] = {
+            data: jsonData,
+            timestamp: new Date().getTime()
+          };
+          
+          saveToLocalStorage();
+          updatePerformanceDataList();
+          
+          showNotification(`绩效数据（${weekValue}）导入成功，共 ${jsonData.length} 条记录`, 'success');
+          
+          // 重置输入
+          elements.weekInputContainer.classList.add('hidden');
+          elements.weekInput.value = '';
+          currentPerformanceFile = null;
+          
+          // 更新上传状态
+          elements.performanceUploadStatus.innerHTML = `
+            <div class="text-sm text-success flex items-center">
+              <i class="fa fa-check-circle mr-1"></i> 导入成功：${currentPerformanceFile?.name || ''}（${weekValue}，${jsonData.length}条记录）
+            </div>
+          `;
+        } catch (error) {
+          console.error('处理绩效数据出错：', error);
+          showNotification('文件解析错误，请检查文件格式', 'error');
+        }
+      };
+      
+      reader.readAsArrayBuffer(currentPerformanceFile);
+    }
+
+    // 更新绩效数据列表（增加下载按钮）
+    function updatePerformanceDataList() {
+      const weeks = Object.keys(appData.performanceData);
+      
+      // 按周数排序（提取W后面的数字进行比较）
+      weeks.sort((a, b) => {
+        const weekA = parseInt(a.split('W')[1]);
+        const weekB = parseInt(b.split('W')[1]);
+        return weekA - weekB;
+      });
+      
+      if (weeks.length === 0) {
+        elements.performanceTableBody.innerHTML = `
+          <tr>
+            <td colspan="4" class="px-4 py-8 text-center text-gray-500">暂无导入数据</td>
+          </tr>
+        `;
+        return;
+      }
+      
+      let html = '';
+      for (const week of weeks) {
+        const item = appData.performanceData[week];
+        const date = new Date(item.timestamp);
+        const formattedDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        
+        html += `
+          <tr class="hover:bg-gray-50 transition-colors">
+            <td class="px-4 py-3 whitespace-nowrap">${week}</td>
+            <td class="px-4 py-3 whitespace-nowrap">${item.data.length} 条</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${formattedDate}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+              <button class="text-primary hover:text-primary/80 transition-colors download-performance mr-3" data-week="${week}">
+                <i class="fa fa-download"></i> 下载
+              </button>
+              <button class="text-danger hover:text-danger/80 transition-colors delete-performance" data-week="${week}">
+                <i class="fa fa-trash-o"></i> 删除
+              </button>
+            </td>
+          </tr>
+        `;
+      }
+      
+      elements.performanceTableBody.innerHTML = html;
+      
+      // 绑定下载事件
+      document.querySelectorAll('.download-performance').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const week = this.getAttribute('data-week');
+          downloadPerformanceData(week);
+        });
+      });
+      
+      // 绑定删除事件
+      document.querySelectorAll('.delete-performance').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const week = this.getAttribute('data-week');
+          if (confirm(`确定要删除 ${week} 的绩效数据吗？`)) {
+            delete appData.performanceData[week];
+            saveToLocalStorage();
+            updatePerformanceDataList();
+            showNotification(`已删除 ${week} 的绩效数据`, 'info');
+          }
+        });
+      });
+    }
+
+    // 下载指定周的绩效数据（包含新增字段）
+    function downloadPerformanceData(week) {
+      const weekData = appData.performanceData[week];
+      if (!weekData) {
+        showNotification('未找到对应的数据', 'error');
+        return;
+      }
+      
+      // 获取目标值
+      const satisfactionTarget = parseFloat(elements.satisfactionTarget.value) || 83.5;
+      const resolutionTarget = parseFloat(elements.resolutionTarget.value) || 70;
+      
+      // 计算当前周的总评价量和总解决率评价量（仅基于当前周数据）
+      let totalEvaluationCount = 0;
+      let totalResolutionEvaluationCount = 0;
+      
+      weekData.data.forEach(item => {
+        totalEvaluationCount += parseFloat(item['评价量_剔除R'] || 0);
+        totalResolutionEvaluationCount += parseFloat(item['解决率总评价量_剔除R'] || 0);
+      });
+      
+      // 处理每条数据，添加新字段
+      const processedData = weekData.data.map(item => {
+        // 从员工花名单匹配姓名和组别
+        const staffInfo = appData.staffData.find(staff => staff['ERP账号'] === item['ERP账号']) || {};
+        
+        // 处理满意度（原始值用于计算）
+        let satisfactionStr = item['满意度_剔除R'] || '0';
+        let satisfaction; // 原始值（用于计算）
+        if (typeof satisfactionStr === 'string' && satisfactionStr.includes('%')) {
+          satisfaction = parseFloat(satisfactionStr.replace('%', '')) / 100 || 0;
+        } else {
+          satisfaction = parseFloat(satisfactionStr) || 0;
+        }
+        
+        // 处理解决率（原始值用于计算）
+        let resolutionStr = item['解决率_剔除R'] || '0';
+        let resolutionRate; // 原始值（用于计算）
+        if (typeof resolutionStr === 'string' && resolutionStr.includes('%')) {
+          resolutionRate = parseFloat(resolutionStr.replace('%', '')) / 100 || 0;
+        } else {
+          resolutionRate = parseFloat(resolutionStr) || 0;
+        }
+        
+        // 计算影响值（仅基于当前周数据）
+        const evaluationCount = parseFloat(item['评价量_剔除R'] || 0);
+        const resolutionEvaluationCount = parseFloat(item['解决率总评价量_剔除R'] || 0);
+        
+        let satisfactionImpact = 0;
+        let resolutionImpact = 0;
+        
+        if (totalEvaluationCount > 0) {
+          satisfactionImpact = (satisfaction - satisfactionTarget / 100) * (evaluationCount / totalEvaluationCount);
+        }
+        
+        if (totalResolutionEvaluationCount > 0) {
+          resolutionImpact = (resolutionRate - resolutionTarget / 100) * (resolutionEvaluationCount / totalResolutionEvaluationCount);
+        }
+        
+        // 保留小数点后6位
+        satisfactionImpact = parseFloat(satisfactionImpact.toFixed(6));
+        resolutionImpact = parseFloat(resolutionImpact.toFixed(6));
+        
+        // 构建新数据对象（保留原始字段，添加新字段）
+        const newItem = { ...item };
+        newItem['姓名'] = staffInfo['姓名'] || '';
+        newItem['组别'] = staffInfo['组别'] || '';
+        newItem['满意度_剔除R影响值'] = satisfactionImpact;
+        newItem['解决率_剔除R影响值'] = resolutionImpact;
+        
+        return newItem;
+      });
+      
+      // 创建工作簿并导出
+      const worksheet = XLSX.utils.json_to_sheet(processedData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, `绩效数据_${week}`);
+      
+      const fileName = `绩效数据_${week}_带影响值.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      
+      showNotification(`${week} 绩效数据下载成功，已包含姓名、组别和影响值`, 'success');
+    }
+
+    // 下载绩效数据模板
+    function downloadPerformanceTemplate() {
+      const headers = [
+        '五级部门', '新老员工', 'ERP账号', '客服账号', '接待量',
+        '满意度_剔除R', '解决率_剔除R',
+        '满意量_剔除R', '评价量_剔除R', '已解决量_剔除R', '解决率总评价量_剔除R'
+      ];
+      
+      const worksheet = XLSX.utils.aoa_to_sheet([headers]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '绩效数据模板');
+      
+      XLSX.writeFile(workbook, '绩效数据模板.xlsx');
+    }
+
+    // 下载员工花名单模板
+    function downloadStaffTemplate() {
+      const headers = ['姓名', 'ERP账号', '组别'];
+      
+      const worksheet = XLSX.utils.aoa_to_sheet([headers]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '员工花名单模板');
+      
+      XLSX.writeFile(workbook, '员工花名单模板.xlsx');
+    }
+
+    // 生成结果数据
+    function generateResultData() {
+      // 检查是否有绩效数据
+      const weeks = Object.keys(appData.performanceData);
+      if (weeks.length === 0) {
+        showNotification('请先导入绩效数据', 'warning');
+        return;
+      }
+      
+      // 检查是否有员工数据
+      if (appData.staffData.length === 0) {
+        if (!confirm('尚未导入员工花名单，将使用系统默认值（上次导入的数据）。是否继续？')) {
+          return;
+        }
+      }
+      
+      // 获取目标值
+      const satisfactionTarget = parseFloat(elements.satisfactionTarget.value) || 83.5;
+      const resolutionTarget = parseFloat(elements.resolutionTarget.value) || 70;
+      
+      // 按周数排序绩效数据
+      const sortedWeeks = [...weeks].sort((a, b) => {
+        const weekA = parseInt(a.split('W')[1]);
+        const weekB = parseInt(b.split('W')[1]);
+        return weekA - weekB;
+      });
+      
+      // 记录当前时间周列表和最新的一周
+      appData.currentWeeks = sortedWeeks;
+      appData.latestWeek = sortedWeeks[sortedWeeks.length - 1];
+      
+      // 收集所有ERP账号（来自员工花名单）
+      const allErpAccounts = appData.staffData.map(staff => staff['ERP账号']).filter(erp => erp !== null && erp !== undefined);
+      
+      // 创建结果数据结构
+      const resultData = {};
+      
+      // 为每个员工初始化数据
+      appData.staffData.forEach(staff => {
+        const erpAccount = staff['ERP账号'];
+        
+        if (erpAccount) {
+          resultData[erpAccount] = {
+            'ERP账号': erpAccount,
+            '姓名': staff['姓名'] || '',
+            '组别': staff['组别'] || '',
+            '五级部门': '',
+            '新老员工': '',
+            '客服账号': '',
+            'V数建议': '' // V数建议字段
+          };
+        }
+      });
+      
+      // 处理每周数据
+      for (const week of sortedWeeks) {
+        const weekData = appData.performanceData[week].data;
+        
+        // 计算每周的总评价量和总解决率评价量
+        let totalEvaluationCount = 0;
+        let totalResolutionEvaluationCount = 0;
+        
+        weekData.forEach(item => {
+          totalEvaluationCount += parseFloat(item['评价量_剔除R'] || 0);
+          totalResolutionEvaluationCount += parseFloat(item['解决率总评价量_剔除R'] || 0);
+        });
+        
+        // 处理每个员工的数据
+        weekData.forEach(item => {
+          const erpAccount = item['ERP账号'];
+          
+          // 如果员工不在结果数据中，则创建新条目
+          if (!resultData[erpAccount]) {
+            // 尝试从员工花名单中查找
+            const staffInfo = appData.staffData.find(staff => staff['ERP账号'] === erpAccount);
+            
+            resultData[erpAccount] = {
+              'ERP账号': erpAccount,
+              '姓名': staffInfo ? staffInfo['姓名'] || '' : '',
+              '组别': staffInfo ? staffInfo['组别'] || '' : '',
+              '五级部门': item['五级部门'] || '',
+              '新老员工': item['新老员工'] || '',
+              '客服账号': item['客服账号'] || '',
+              'V数建议': '' // V数建议字段
+            };
+          } else {
+            // 更新基本信息（如果尚未设置）
+            if (!resultData[erpAccount]['五级部门']) {
+              resultData[erpAccount]['五级部门'] = item['五级部门'] || '';
+            }
+            if (!resultData[erpAccount]['新老员工']) {
+              resultData[erpAccount]['新老员工'] = item['新老员工'] || '';
+            }
+            if (!resultData[erpAccount]['客服账号']) {
+              resultData[erpAccount]['客服账号'] = item['客服账号'] || '';
+            }
+          }
+          
+          // 处理满意度（原始值用于计算，展示时×100）
+          let satisfactionStr = item['满意度_剔除R'] || '0';
+          let satisfaction; // 原始值（用于计算）
+          if (typeof satisfactionStr === 'string' && satisfactionStr.includes('%')) {
+            // 是百分比字符串，提取数值并转换为小数
+            satisfaction = parseFloat(satisfactionStr.replace('%', '')) / 100 || 0;
+          } else {
+            // 是数字或小数字符串，直接转换
+            satisfaction = parseFloat(satisfactionStr) || 0;
+          }
+          const satisfactionDisplay = `${(satisfaction * 100).toFixed(2)}%`; // 展示值
+          
+          // 处理解决率（原始值用于计算，展示时×100）
+          let resolutionStr = item['解决率_剔除R'] || '0';
+          let resolutionRate; // 原始值（用于计算）
+          if (typeof resolutionStr === 'string' && resolutionStr.includes('%')) {
+            resolutionRate = parseFloat(resolutionStr.replace('%', '')) / 100 || 0;
+          } else {
+            resolutionRate = parseFloat(resolutionStr) || 0;
+          }
+          const resolutionDisplay = `${(resolutionRate * 100).toFixed(2)}%`; // 展示值
+          
+          const 接待量 = parseFloat(item['接待量'] || 0);
+          const evaluationCount = parseFloat(item['评价量_剔除R'] || 0);
+          const resolutionEvaluationCount = parseFloat(item['解决率总评价量_剔除R'] || 0);
+          
+          // 计算影响值（使用原始值）
+          let satisfactionImpact = 0;
+          let resolutionImpact = 0;
+          
+          if (totalEvaluationCount > 0) {
+            satisfactionImpact = (satisfaction - satisfactionTarget / 100) * (evaluationCount / totalEvaluationCount);
+          }
+          
+          if (totalResolutionEvaluationCount > 0) {
+            resolutionImpact = (resolutionRate - resolutionTarget / 100) * (resolutionEvaluationCount / totalResolutionEvaluationCount);
+          }
+          
+          // 保留小数点后6位
+          satisfactionImpact = parseFloat(satisfactionImpact.toFixed(6));
+          resolutionImpact = parseFloat(resolutionImpact.toFixed(6));
+          
+          // 存储每周数据（原始值和展示值）
+          resultData[erpAccount][`${week}_接待量`] = 接待量;
+          resultData[erpAccount][`${week}_满意度_剔除R`] = satisfactionDisplay;
+          resultData[erpAccount][`${week}_满意度_原始值`] = satisfaction; // 保存原始值用于排序
+          resultData[erpAccount][`${week}_满意度影响值`] = satisfactionImpact;
+          resultData[erpAccount][`${week}_解决率_剔除R`] = resolutionDisplay;
+          resultData[erpAccount][`${week}_解决率_原始值`] = resolutionRate; // 保存原始值用于排序
+          resultData[erpAccount][`${week}_解决率影响值`] = resolutionImpact;
+          
+          // 如果是最新一周，计算V数建议
+          if (week === appData.latestWeek) {
+            if (satisfactionImpact > 0) {
+              resultData[erpAccount]['V数建议'] = '建议升V';
+            } else if (satisfactionImpact < 0) {
+              resultData[erpAccount]['V数建议'] = '建议降V';
+            } else {
+              resultData[erpAccount]['V数建议'] = '建议保持';
+            }
+          }
+        });
+      }
+      
+      // 转换为数组并保存
+      appData.resultData = Object.values(resultData);
+      appData.filteredResultData = [...appData.resultData];
+      
+      // 生成表头
+      generateResultHeaders(sortedWeeks);
+      
+      // 初始化排序选项
+      initSortOptions();
+      
+      // 应用默认排序（最新一周接待量降序）
+      applyDefaultSort();
+      
+      // 应用默认的五级部门筛选
+      applyFilter();
+      
+      // 显示结果
+      displayResultData(sortedWeeks);
+      
+      showNotification('绩效数据生成成功', 'success');
+    }
+
+    // 初始化排序选项
+    function initSortOptions() {
+      // 清空现有选项
+      elements.sortField.innerHTML = '';
+      
+      // 为每个时间周添加排序选项
+      appData.currentWeeks.forEach(week => {
+        const weekNum = week.split('W')[1];
+        // 接待量
+        const volumeOption = document.createElement('option');
+        volumeOption.value = `${week}_接待量`;
+        volumeOption.textContent = `周${weekNum}_接待量`;
+        elements.sortField.appendChild(volumeOption);
+        
+        // 满意度（使用原始值排序）
+        const satisfactionOption = document.createElement('option');
+        satisfactionOption.value = `${week}_满意度_原始值`;
+        satisfactionOption.textContent = `周${weekNum}_满意度`;
+        elements.sortField.appendChild(satisfactionOption);
+        
+        // 满意度影响值
+        const satisfactionImpactOption = document.createElement('option');
+        satisfactionImpactOption.value = `${week}_满意度影响值`;
+        satisfactionImpactOption.textContent = `周${weekNum}_满意度影响值`;
+        elements.sortField.appendChild(satisfactionImpactOption);
+        
+        // 解决率影响值
+        const resolutionImpactOption = document.createElement('option');
+        resolutionImpactOption.value = `${week}_解决率影响值`;
+        resolutionImpactOption.textContent = `周${weekNum}_解决率影响值`;
+        elements.sortField.appendChild(resolutionImpactOption);
+      });
+    }
+
+    // 应用默认排序（最新一周接待量降序）
+    function applyDefaultSort() {
+      if (appData.latestWeek) {
+        elements.sortField.value = `${appData.latestWeek}_接待量`;
+        elements.sortDirection.value = 'desc';
+        applySort();
+      }
+    }
+
+    // 应用排序
+    function applySort() {
+      const sortField = elements.sortField.value;
+      const sortDirection = elements.sortDirection.value;
+      
+      if (!sortField) return;
+      
+      // 对筛选后的数据进行排序
+      appData.filteredResultData.sort((a, b) => {
+        const valueA = a[sortField] !== undefined ? a[sortField] : -Infinity;
+        const valueB = b[sortField] !== undefined ? b[sortField] : -Infinity;
+        
+        // 处理数字比较
+        if (typeof valueA === 'number' && typeof valueB === 'number') {
+          return sortDirection === 'asc' ? valueA - valueB : valueB - valueA;
+        }
+        
+        // 字符串比较
+        return sortDirection === 'asc' 
+          ? String(valueA).localeCompare(String(valueB))
+          : String(valueB).localeCompare(String(valueA));
+      });
+      
+      // 重新显示数据
+      displayResultData(appData.currentWeeks);
+    }
+
+    // 应用筛选
+    function applyFilter() {
+      const dept = elements.deptFilter.value.trim().toLowerCase();
+      const erp = elements.erpFilter.value.trim().toLowerCase();
+      const name = elements.nameFilter.value.trim().toLowerCase();
+      const group = elements.groupFilter.value.trim().toLowerCase();
+      const vSuggestion = elements.vSuggestionFilter.value;
+      
+      // 过滤数据
+      appData.filteredResultData = appData.resultData.filter(row => {
+        // 五级部门筛选
+        if (dept && !String(row['五级部门'] || '').toLowerCase().includes(dept)) {
+          return false;
+        }
+        
+        // ERP账号筛选
+        if (erp && !String(row['ERP账号'] || '').toLowerCase().includes(erp)) {
+          return false;
+        }
+        
+        // 姓名筛选
+        if (name && !String(row['姓名'] || '').toLowerCase().includes(name)) {
+          return false;
+        }
+        
+        // 组别筛选
+        if (group && !String(row['组别'] || '').toLowerCase().includes(group)) {
+          return false;
+        }
+        
+        // V数建议筛选
+        if (vSuggestion && row['V数建议'] !== vSuggestion) {
+          return false;
+        }
+        
+        return true;
+      });
+      
+      // 重新应用当前排序
+      applySort();
+      
+      showNotification(`筛选完成，共 ${appData.filteredResultData.length} 条数据`, 'info');
+    }
+
+    // 重置筛选条件
+    function resetFilter() {
+      // 重置时保留五级部门的默认值
+      elements.erpFilter.value = '';
+      elements.nameFilter.value = '';
+      elements.groupFilter.value = '';
+      elements.vSuggestionFilter.value = '';
+      
+      // 恢复所有数据并应用默认的五级部门筛选
+      appData.filteredResultData = [...appData.resultData];
+      applyFilter();
+    }
+
+    // 生成结果表头
+    function generateResultHeaders(weeks) {
+      // 基础表头，包含V数建议
+      const baseHeaders = ['ERP账号', '姓名', '客服账号', '五级部门', '组别', '新老员工', 'V数建议'];
+      
+      // 每周的表头
+      const weekHeaders = [];
+      weeks.forEach(week => {
+        weekHeaders.push(
+          `${week}_接待量`,
+          `${week}_满意度_剔除R`,
+          `${week}_满意度影响值`,
+          `${week}_解决率_剔除R`,
+          `${week}_解决率影响值`
+        );
+      });
+      
+      appData.resultHeaders = [...baseHeaders, ...weekHeaders];
+    }
+
+    // 显示结果数据
+    let showAllWeeks = false;
+    function displayResultData(weeks) {
+      // 更新计数显示
+      elements.totalWeeksCount.textContent = weeks.length;
+      elements.visibleWeeksCount.textContent = Math.min(weeks.length, 5);
+      
+      // 生成表头
+      let headerHtml = '';
+      
+      // 基础表头，包含V数建议
+      ['ERP账号', '姓名', '客服账号', '五级部门', '组别', '新老员工', 'V数建议'].forEach(header => {
+        headerHtml += `<th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">${header}</th>`;
+      });
+      
+      // 每周的表头
+      weeks.forEach((week, index) => {
+        // 确定是否显示该周数据
+        const shouldShow = showAllWeeks || index >= weeks.length - 5;
+        const weekClass = shouldShow ? '' : 'hidden extra-week';
+        const weekNum = week.split('W')[1];
+        
+        headerHtml += `
+          <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass}" data-week="${week}">周${weekNum}_接待量</th>
+          <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass}" data-week="${week}">周${weekNum}_满意度</th>
+          <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass}" data-week="${week}">周${weekNum}_满意度影响值</th>
+          <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass}" data-week="${week}">周${weekNum}_解决率</th>
+          <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass}" data-week="${week}">周${weekNum}_解决率影响值</th>
+        `;
+      });
+      
+      elements.resultTableHeader.innerHTML = headerHtml;
+      
+      // 生成表格内容
+      let bodyHtml = '';
+      
+      if (appData.filteredResultData.length === 0) {
+        bodyHtml = `
+          <tr>
+            <td colspan="${appData.resultHeaders.length}" class="px-4 py-8 text-center text-gray-500">没有符合条件的数据</td>
+          </tr>
+        `;
+      } else {
+        appData.filteredResultData.forEach((row, rowIndex) => {
+          let rowHtml = `<tr class="${rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 transition-colors">`;
+          
+          // 基础数据，包含V数建议并添加样式
+          ['ERP账号', '姓名', '客服账号', '五级部门', '组别', '新老员工', 'V数建议'].forEach(field => {
+            let cellContent = row[field] || '-';
+            let cellClass = 'px-3 py-2 text-sm whitespace-nowrap';
+            
+            // 为V数建议添加不同的颜色
+            if (field === 'V数建议') {
+              cellClass += ' font-medium';
+              switch(cellContent) {
+                case '建议升V':
+                  cellClass += ' text-success';
+                  break;
+                case '建议降V':
+                  cellClass += ' text-danger';
+                  break;
+                case '建议保持':
+                  cellClass += ' text-warning';
+                  break;
+                default:
+                  cellClass += ' text-gray-700';
+              }
+            } else {
+              cellClass += ' text-gray-700';
+            }
+            
+            rowHtml += `<td class="${cellClass}">${cellContent}</td>`;
+          });
+          
+          // 每周的数据
+          weeks.forEach((week, index) => {
+            const shouldShow = showAllWeeks || index >= weeks.length - 5;
+            const weekClass = shouldShow ? '' : 'hidden extra-week';
+            
+            rowHtml += `
+              <td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap ${weekClass}" data-week="${week}">${row[`${week}_接待量`] || '-'}</td>
+              <td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap ${weekClass}" data-week="${week}">${row[`${week}_满意度_剔除R`] || '-'}</td>
+              <td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap ${weekClass}" data-week="${week}">${row[`${week}_满意度影响值`] !== undefined ? row[`${week}_满意度影响值`] : '-'}</td>
+              <td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap ${weekClass}" data-week="${week}">${row[`${week}_解决率_剔除R`] || '-'}</td>
+              <td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap ${weekClass}" data-week="${week}">${row[`${week}_解决率影响值`] !== undefined ? row[`${week}_解决率影响值`] : '-'}</td>
+            `;
+          });
+          
+          rowHtml += `</tr>`;
+          bodyHtml += rowHtml;
+        });
+      }
+      
+      elements.resultTableBody.innerHTML = bodyHtml;
+      
+      // 显示结果区域
+      elements.resultSection.style.display = 'block';
+      
+      // 更新切换按钮文本
+      updateToggleButtonText();
+    }
+
+    // 更新切换按钮文本
+    function updateToggleButtonText() {
+      if (showAllWeeks) {
+        elements.toggleWeeksBtn.innerHTML = '<i class="fa fa-chevron-up mr-1"></i>折叠早期数据';
+      } else {
+        elements.toggleWeeksBtn.innerHTML = '<i class="fa fa-chevron-down mr-1"></i>展开全部';
+      }
+    }
+
+    // 切换周数据显示
+    function toggleWeeksDisplay() {
+      showAllWeeks = !showAllWeeks;
+      displayResultData(appData.currentWeeks);
+    }
+
+    // 导出结果数据（筛选后的）
+    function exportResultData() {
+      if (appData.filteredResultData.length === 0) {
+        showNotification('没有可导出的数据', 'warning');
+        return;
+      }
+      
+      // 准备导出数据（包含所有周和V数建议，处理周数据格式）
+      const exportData = appData.filteredResultData.map(row => {
+        const exportRow = {};
+        
+        // 复制基础字段
+        ['ERP账号', '姓名', '客服账号', '五级部门', '组别', '新老员工', 'V数建议'].forEach(field => {
+          exportRow[field] = row[field] || '';
+        });
+        
+        // 处理每周数据，去掉原始值字段，只保留展示字段
+        appData.currentWeeks.forEach(week => {
+          const weekNum = week.split('W')[1];
+          exportRow[`周${weekNum}_接待量`] = row[`${week}_接待量`] || '';
+          exportRow[`周${weekNum}_满意度`] = row[`${week}_满意度_剔除R`] || '';
+          exportRow[`周${weekNum}_满意度影响值`] = row[`${week}_满意度影响值`] || '';
+          exportRow[`周${weekNum}_解决率`] = row[`${week}_解决率_剔除R`] || '';
+          exportRow[`周${weekNum}_解决率影响值`] = row[`${week}_解决率影响值`] || '';
+        });
+        
+        return exportRow;
+      });
+      
+      // 创建工作簿并导出
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '绩效分析结果');
+      
+      const date = new Date();
+      const fileName = `绩效分析结果_${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}.xlsx`;
+      
+      XLSX.writeFile(workbook, fileName);
+      showNotification('筛选后数据导出成功', 'success');
+    }
+
+    // 显示通知
+    function showNotification(message, type = 'info') {
+      const notification = elements.notification;
+      
+      // 设置样式
+      notification.className = 'fixed bottom-4 right-4 px-4 py-3 rounded-md shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 flex items-center max-w-xs';
+      
+      switch (type) {
+        case 'success':
+          notification.classList.add('bg-success', 'text-white');
+          notification.innerHTML = `<i class="fa fa-check-circle mr-2"></i> ${message}`;
+          break;
+        case 'error':
+          notification.classList.add('bg-danger', 'text-white');
+          notification.innerHTML = `<i class="fa fa-exclamation-circle mr-2"></i> ${message}`;
+          break;
+        case 'warning':
+          notification.classList.add('bg-warning', 'text-white');
+          notification.innerHTML = `<i class="fa fa-exclamation-triangle mr-2"></i> ${message}`;
+          break;
+        default:
+          notification.classList.add('bg-primary', 'text-white');
+          notification.innerHTML = `<i class="fa fa-info-circle mr-2"></i> ${message}`;
+      }
+      
+      // 显示通知
+      setTimeout(() => {
+        notification.classList.remove('translate-y-20', 'opacity-0');
+      }, 10);
+      
+      // 3秒后隐藏
+      setTimeout(() => {
+        notification.classList.add('translate-y-20', 'opacity-0');
+      }, 3000);
+    }
+
+    // 初始化应用
+    document.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>
