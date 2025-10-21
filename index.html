@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>影响值分析系统</title>
+  <title>绩效数据分析系统</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -55,6 +55,37 @@
       .transition-height {
         transition: max-height 0.3s ease-in-out;
       }
+      .loading-shimmer {
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+      }
+      @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+      .header-checkbox {
+        @apply w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary;
+      }
+      .compare-up {
+        @apply text-success font-medium;
+      }
+      .compare-down {
+        @apply text-danger font-medium;
+      }
+      .sticky-column {
+        position: sticky;
+        left: 0;
+        z-index: 10;
+        background-color: inherit;
+      }
+      .sticky-column-1 { left: 0; }
+      .sticky-column-2 { left: 8rem; } /* ERP账号宽度 */
+      .sticky-column-3 { left: 16rem; } /* 姓名宽度 */
+      .sticky-column-4 { left: 24rem; } /* 客服账号宽度 */
+      .sticky-column-5 { left: 32rem; } /* 五级部门宽度 */
+      .sticky-column-6 { left: 40rem; } /* 组别宽度 */
+      .sticky-column-7 { left: 48rem; } /* 新老员工宽度 */
     }
   </style>
 </head>
@@ -64,15 +95,26 @@
     <div class="container mx-auto px-4 py-4 flex justify-between items-center">
       <div class="flex items-center space-x-2">
         <i class="fa fa-bar-chart text-primary text-2xl"></i>
-        <h1 class="text-xl font-bold text-gray-700">影响值分析系统</h1>
+        <h1 class="text-xl font-bold text-gray-700">绩效数据分析系统</h1>
       </div>
-      <div class="text-sm text-gray-500">
+      <div class="text-sm text-gray-500 flex items-center gap-4">
         <span id="lastImportInfo">上次导入：暂无记录</span>
+        <button id="clearOldDataBtn" class="text-danger hover:text-danger/80 text-xs">
+          <i class="fa fa-trash-o mr-1"></i>清理历史数据
+        </button>
       </div>
     </div>
   </header>
 
-  <main class="container mx-auto px-4 py-6">
+  <main class="container mx-auto px-4 py-6 w-full max-w-none">
+    <!-- 加载状态遮罩 -->
+    <div id="loadingMask" class="fixed inset-0 bg-black/5 z-50 hidden flex items-center justify-center">
+      <div class="bg-white p-6 rounded-lg shadow-lg flex items-center gap-3">
+        <div class="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+        <span id="loadingText">处理中，请稍候...</span>
+      </div>
+    </div>
+
     <!-- 导入区域 -->
     <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
       <!-- 绩效数据表导入 -->
@@ -90,7 +132,7 @@
         <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors cursor-pointer" id="performanceDropArea">
           <i class="fa fa-cloud-upload text-4xl text-gray-400 mb-2"></i>
           <p class="text-gray-500 mb-2">拖放绩效数据表格到此处，或点击上传</p>
-          <p class="text-xs text-gray-400">支持 .xlsx 格式文件</p>
+          <p class="text-xs text-gray-400">支持 .xlsx 格式文件（最大10MB）</p>
           <input type="file" id="performanceFileInput" accept=".xlsx" class="hidden">
         </div>
         
@@ -127,7 +169,7 @@
         <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors cursor-pointer" id="staffDropArea">
           <i class="fa fa-cloud-upload text-4xl text-gray-400 mb-2"></i>
           <p class="text-gray-500 mb-2">拖放员工花名单到此处，或点击上传</p>
-          <p class="text-xs text-gray-400">支持 .xlsx 格式文件</p>
+          <p class="text-xs text-gray-400">支持 .xlsx 格式文件（最大5MB）</p>
           <input type="file" id="staffFileInput" accept=".xlsx" class="hidden">
         </div>
         
@@ -171,7 +213,7 @@
         <i class="fa fa-bullseye text-warning mr-2"></i>目标值设置
       </h2>
       
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div>
           <label for="satisfactionTarget" class="block text-sm font-medium text-gray-700 mb-1">满意度_剔除R目标值</label>
           <div class="flex items-center">
@@ -179,6 +221,7 @@
                   class="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
             <span class="ml-2 text-gray-500">%</span>
           </div>
+          <p class="text-xs text-gray-500 mt-1">提示：取值范围 0-100</p>
         </div>
         
         <div>
@@ -188,12 +231,23 @@
                   class="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
             <span class="ml-2 text-gray-500">%</span>
           </div>
+          <p class="text-xs text-gray-500 mt-1">提示：取值范围 0-100</p>
+        </div>
+        
+        <div>
+          <label for="resolutionSampleTarget" class="block text-sm font-medium text-gray-700 mb-1">解决率样本量目标值</label>
+          <div class="flex items-center">
+            <input type="number" id="resolutionSampleTarget" value="5" min="0" step="1"
+                  class="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+            <span class="ml-2 text-gray-500">条</span>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">提示：取值范围 ≥0 的整数</p>
         </div>
       </div>
       
       <div class="mt-6">
         <button id="generateDataBtn" class="bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-md text-sm font-medium transition-colors flex items-center">
-          <i class="fa fa-calculator mr-2"></i>生成影响值数据
+          <i class="fa fa-calculator mr-2"></i>生成绩效数据
         </button>
       </div>
     </section>
@@ -205,9 +259,30 @@
           <i class="fa fa-table text-success mr-2"></i>绩效分析结果
         </h2>
         
-        <div class="mt-3 md:mt-0">
+        <div class="mt-3 md:mt-0 flex gap-2">
+          <button id="toggleHeaderSettingsBtn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm flex items-center transition-colors">
+            <i class="fa fa-cog mr-2"></i>表头设置
+          </button>
           <button id="exportResultBtn" class="bg-success hover:bg-success/90 text-white px-4 py-2 rounded-md text-sm flex items-center transition-colors">
             <i class="fa fa-download mr-2"></i>导出筛选后数据
+          </button>
+        </div>
+      </div>
+      
+      <!-- 表头设置面板 -->
+      <div id="headerSettingsPanel" class="mb-6 border rounded-lg p-4 hidden">
+        <h3 class="text-sm font-semibold mb-3 flex items-center">
+          <i class="fa fa-list-ul mr-2 text-gray-500"></i>表头显示控制
+        </h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-60 overflow-y-auto scrollbar-thin p-2" id="headerCheckboxes">
+          <!-- 动态生成表头复选框 -->
+        </div>
+        <div class="mt-3 flex justify-end gap-2">
+          <button id="selectAllHeadersBtn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-sm transition-colors">
+            全选
+          </button>
+          <button id="applyHeaderSettingsBtn" class="bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-md text-sm transition-colors">
+            应用设置
           </button>
         </div>
       </div>
@@ -281,9 +356,10 @@
         </button>
       </div>
       
-      <div class="overflow-x-auto scrollbar-thin" style="max-height: 600px;">
+      <!-- 表格容器 -->
+      <div class="overflow-x-auto scrollbar-thin" style="max-height: 600px; position: relative;">
         <table class="min-w-full divide-y divide-gray-200">
-          <thead class="sticky top-0 bg-gray-50">
+          <thead class="sticky top-0 bg-gray-50 z-10">
             <tr id="resultTableHeader">
               <!-- 表头将通过JS动态生成 -->
             </tr>
@@ -292,13 +368,35 @@
             <!-- 表格内容将通过JS动态生成 -->
           </tbody>
         </table>
+        <!-- 空状态/加载状态 -->
+        <div id="tableEmptyState" class="absolute inset-0 flex items-center justify-center bg-white/80 hidden">
+          <p class="text-gray-500">暂无数据</p>
+        </div>
+      </div>
+      
+      <!-- 分页控件 -->
+      <div class="mt-4 flex flex-col sm:flex-row justify-between items-center gap-3" id="paginationControls">
+        <div class="text-sm text-gray-500">
+          显示 <span id="currentPageRange">0-0</span> 条，共 <span id="totalItemsCount">0</span> 条
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="prevPageBtn" class="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            <i class="fa fa-chevron-left"></i> 上一页
+          </button>
+          <div class="flex items-center gap-1" id="pageNumbers">
+            <!-- 页码将动态生成 -->
+          </div>
+          <button id="nextPageBtn" class="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            下一页 <i class="fa fa-chevron-right"></i>
+          </button>
+        </div>
       </div>
     </section>
   </main>
 
   <footer class="bg-white border-t border-gray-200 py-4">
     <div class="container mx-auto px-4 text-center text-sm text-gray-500">
-      <p>影响值分析系统 &copy; 2025 @liguoping.26</p>
+      <p>绩效数据分析系统 &copy; 2023</p>
     </div>
   </footer>
 
@@ -314,12 +412,24 @@
       resultData: [],      // 生成的结果数据
       filteredResultData: [], // 筛选后的结果数据
       resultHeaders: [],   // 结果数据的表头
+      headerVisibility: {}, // 表头可见性设置 { "field": true/false }
       latestWeek: '',      // 最新的时间周，用于判断V数建议和默认排序
-      currentWeeks: []     // 当前的时间周列表
+      currentWeeks: [],    // 当前的时间周列表
+      currentPage: 1,      // 当前页码
+      pageSize: 50,        // 每页显示数量
+      totalPages: 0        // 总页数
     };
 
     // DOM 元素
     const elements = {
+      // 加载状态
+      loadingMask: document.getElementById('loadingMask'),
+      loadingText: document.getElementById('loadingText'),
+      tableEmptyState: document.getElementById('tableEmptyState'),
+      
+      // 数据清理
+      clearOldDataBtn: document.getElementById('clearOldDataBtn'),
+      
       // 绩效数据导入
       performanceDropArea: document.getElementById('performanceDropArea'),
       performanceFileInput: document.getElementById('performanceFileInput'),
@@ -344,6 +454,7 @@
       // 目标值设置
       satisfactionTarget: document.getElementById('satisfactionTarget'),
       resolutionTarget: document.getElementById('resolutionTarget'),
+      resolutionSampleTarget: document.getElementById('resolutionSampleTarget'),
       generateDataBtn: document.getElementById('generateDataBtn'),
       
       // 结果展示
@@ -354,6 +465,13 @@
       visibleWeeksCount: document.getElementById('visibleWeeksCount'),
       totalWeeksCount: document.getElementById('totalWeeksCount'),
       toggleWeeksBtn: document.getElementById('toggleWeeksBtn'),
+      
+      // 表头设置
+      toggleHeaderSettingsBtn: document.getElementById('toggleHeaderSettingsBtn'),
+      headerSettingsPanel: document.getElementById('headerSettingsPanel'),
+      headerCheckboxes: document.getElementById('headerCheckboxes'),
+      selectAllHeadersBtn: document.getElementById('selectAllHeadersBtn'),
+      applyHeaderSettingsBtn: document.getElementById('applyHeaderSettingsBtn'),
       
       // 排序相关
       sortField: document.getElementById('sortField'),
@@ -369,9 +487,60 @@
       filterBtn: document.getElementById('filterBtn'),
       resetFilterBtn: document.getElementById('resetFilterBtn'),
       
+      // 分页相关
+      paginationControls: document.getElementById('paginationControls'),
+      prevPageBtn: document.getElementById('prevPageBtn'),
+      nextPageBtn: document.getElementById('nextPageBtn'),
+      pageNumbers: document.getElementById('pageNumbers'),
+      currentPageRange: document.getElementById('currentPageRange'),
+      totalItemsCount: document.getElementById('totalItemsCount'),
+      
       // 通知组件
       notification: document.getElementById('notification')
     };
+
+    // 工具函数：显示加载状态
+    function showLoading(text = '处理中，请稍候...') {
+      elements.loadingText.textContent = text;
+      elements.loadingMask.classList.remove('hidden');
+    }
+
+    // 工具函数：隐藏加载状态
+    function hideLoading() {
+      elements.loadingMask.classList.add('hidden');
+    }
+
+    // 工具函数：防抖处理
+    function debounce(func, delay = 300) {
+      let timer = null;
+      return function(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          func.apply(this, args);
+        }, delay);
+      };
+    }
+
+    // 公共函数：解析百分比值为小数
+    function parsePercentageValue(value) {
+      if (!value) return 0;
+      if (typeof value === 'string' && value.includes('%')) {
+        return parseFloat(value.replace('%', '')) / 100 || 0;
+      }
+      return parseFloat(value) || 0;
+    }
+
+    // 公共函数：计算影响值（保留12位小数）
+    function calculateImpactValue(actualValue, targetValue, personalCount, totalCount) {
+      if (totalCount <= 0) return 0;
+      const rawValue = (actualValue - targetValue) * (personalCount / totalCount);
+      return parseFloat(rawValue.toFixed(12)); // 保留12位小数
+    }
+
+    // 公共函数：格式化影响值为百分比（保留5位小数）
+    function formatImpactValue(value) {
+      return `${(value * 100).toFixed(5)}%`;
+    }
 
     // 初始化应用
     function initApp() {
@@ -387,30 +556,79 @@
 
     // 从本地存储加载数据
     function loadFromLocalStorage() {
-      const savedPerformance = localStorage.getItem('performanceData');
-      const savedStaff = localStorage.getItem('staffData');
-      const savedStaffLastUpdate = localStorage.getItem('staffLastUpdate');
-      
-      if (savedPerformance) {
-        appData.performanceData = JSON.parse(savedPerformance);
-      }
-      
-      if (savedStaff) {
-        appData.staffData = JSON.parse(savedStaff);
-      }
-      
-      if (savedStaffLastUpdate) {
-        appData.staffLastUpdate = parseInt(savedStaffLastUpdate);
+      try {
+        const savedPerformance = localStorage.getItem('performanceData');
+        const savedStaff = localStorage.getItem('staffData');
+        const savedStaffLastUpdate = localStorage.getItem('staffLastUpdate');
+        const savedHeaderVisibility = localStorage.getItem('headerVisibility');
+        
+        if (savedPerformance) {
+          appData.performanceData = JSON.parse(savedPerformance);
+        }
+        
+        if (savedStaff) {
+          appData.staffData = JSON.parse(savedStaff);
+        }
+        
+        if (savedStaffLastUpdate) {
+          appData.staffLastUpdate = parseInt(savedStaffLastUpdate);
+        }
+        
+        if (savedHeaderVisibility) {
+          appData.headerVisibility = JSON.parse(savedHeaderVisibility);
+        }
+      } catch (error) {
+        console.error('加载本地数据失败：', error);
+        showNotification('本地数据损坏，已重置', 'error');
+        // 重置本地存储
+        localStorage.removeItem('performanceData');
+        localStorage.removeItem('staffData');
+        localStorage.removeItem('staffLastUpdate');
+        localStorage.removeItem('headerVisibility');
       }
     }
 
     // 保存数据到本地存储
     function saveToLocalStorage() {
-      localStorage.setItem('performanceData', JSON.stringify(appData.performanceData));
-      localStorage.setItem('staffData', JSON.stringify(appData.staffData));
-      localStorage.setItem('staffLastUpdate', appData.staffLastUpdate.toString());
-      updateLastImportInfo();
-      updateStaffLastUpdate();
+      try {
+        localStorage.setItem('performanceData', JSON.stringify(appData.performanceData));
+        localStorage.setItem('staffData', JSON.stringify(appData.staffData));
+        localStorage.setItem('staffLastUpdate', appData.staffLastUpdate.toString());
+        localStorage.setItem('headerVisibility', JSON.stringify(appData.headerVisibility));
+        updateLastImportInfo();
+        updateStaffLastUpdate();
+      } catch (error) {
+        console.error('保存本地数据失败：', error);
+        showNotification('数据保存失败，可能是存储空间不足', 'error');
+      }
+    }
+
+    // 清理历史数据（保留最近8周）
+    function clearOldData() {
+      const weeks = Object.keys(appData.performanceData);
+      if (weeks.length <= 8) {
+        showNotification('数据量不足8周，无需清理', 'info');
+        return;
+      }
+      
+      if (!confirm('确定要清理历史数据吗？将保留最近8周的数据')) {
+        return;
+      }
+      
+      // 按时间排序，保留最近8周
+      const sortedWeeks = [...weeks].sort((a, b) => {
+        return appData.performanceData[b].timestamp - appData.performanceData[a].timestamp;
+      });
+      
+      // 需要删除的周
+      const weeksToDelete = sortedWeeks.slice(8);
+      weeksToDelete.forEach(week => {
+        delete appData.performanceData[week];
+      });
+      
+      saveToLocalStorage();
+      updatePerformanceDataList();
+      showNotification(`已清理 ${weeksToDelete.length} 周历史数据，保留最近8周`, 'success');
     }
 
     // 更新最后导入信息
@@ -456,6 +674,9 @@
 
     // 绑定事件监听
     function bindEventListeners() {
+      // 清理历史数据
+      elements.clearOldDataBtn.addEventListener('click', clearOldData);
+      
       // 绩效数据拖放上传
       elements.performanceDropArea.addEventListener('click', () => {
         elements.performanceFileInput.click();
@@ -536,12 +757,21 @@
       // 切换周数据显示
       elements.toggleWeeksBtn.addEventListener('click', toggleWeeksDisplay);
       
-      // 排序相关
-      elements.sortBtn.addEventListener('click', applySort);
+      // 表头设置
+      elements.toggleHeaderSettingsBtn.addEventListener('click', toggleHeaderSettingsPanel);
+      elements.selectAllHeadersBtn.addEventListener('click', selectAllHeaders);
+      elements.applyHeaderSettingsBtn.addEventListener('click', applyHeaderSettings);
       
-      // 筛选相关
-      elements.filterBtn.addEventListener('click', applyFilter);
+      // 排序相关（添加防抖）
+      elements.sortBtn.addEventListener('click', debounce(applySort));
+      
+      // 筛选相关（添加防抖）
+      elements.filterBtn.addEventListener('click', debounce(applyFilter));
       elements.resetFilterBtn.addEventListener('click', resetFilter);
+      
+      // 分页相关
+      elements.prevPageBtn.addEventListener('click', goToPrevPage);
+      elements.nextPageBtn.addEventListener('click', goToNextPage);
     }
 
     // 处理绩效数据文件拖放
@@ -561,9 +791,15 @@
       }
     }
 
-    // 处理绩效数据文件
+    // 处理绩效数据文件（添加大小校验）
     let currentPerformanceFile = null;
     function handlePerformanceFile(file) {
+      // 文件大小校验（最大10MB）
+      if (file.size > 10 * 1024 * 1024) {
+        showNotification('文件大小不能超过10MB', 'error');
+        return;
+      }
+      
       if (!file.name.endsWith('.xlsx')) {
         showNotification('请上传.xlsx格式的文件', 'error');
         return;
@@ -578,7 +814,7 @@
       // 显示上传状态
       elements.performanceUploadStatus.classList.remove('hidden');
       elements.performanceUploadStatus.innerHTML = `
-        <div class="text-sm text-gray-600">已选择文件：${file.name}</div>
+        <div class="text-sm text-gray-600">已选择文件：${file.name}（${(file.size / 1024 / 1024).toFixed(2)}MB）</div>
       `;
     }
 
@@ -599,13 +835,20 @@
       }
     }
 
-    // 处理员工花名单文件
+    // 处理员工花名单文件（添加大小校验）
     function handleStaffFile(file) {
+      // 文件大小校验（最大5MB）
+      if (file.size > 5 * 1024 * 1024) {
+        showNotification('文件大小不能超过5MB', 'error');
+        return;
+      }
+      
       if (!file.name.endsWith('.xlsx')) {
         showNotification('请上传.xlsx格式的文件', 'error');
         return;
       }
       
+      showLoading('解析文件中...');
       const reader = new FileReader();
       
       reader.onload = function(e) {
@@ -644,6 +887,8 @@
         } catch (error) {
           console.error('处理员工花名单出错：', error);
           showNotification('文件解析错误，请检查文件格式', 'error');
+        } finally {
+          hideLoading();
         }
       };
       
@@ -657,21 +902,30 @@
         return;
       }
       
-      // 创建工作簿
-      const worksheet = XLSX.utils.json_to_sheet(appData.staffData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, '员工花名单');
+      showLoading('准备下载文件...');
       
-      // 生成文件名（包含最后更新时间）
-      const date = new Date(appData.staffLastUpdate);
-      const formattedDate = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
-      const fileName = `员工花名单_${formattedDate}.xlsx`;
-      
-      XLSX.writeFile(workbook, fileName);
-      showNotification('员工花名单下载成功', 'success');
+      try {
+        // 创建工作簿
+        const worksheet = XLSX.utils.json_to_sheet(appData.staffData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, '员工花名单');
+        
+        // 生成文件名（包含最后更新时间）
+        const date = new Date(appData.staffLastUpdate);
+        const formattedDate = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
+        const fileName = `员工花名单_${formattedDate}.xlsx`;
+        
+        XLSX.writeFile(workbook, fileName);
+        showNotification('员工花名单下载成功', 'success');
+      } catch (error) {
+        console.error('下载员工花名单失败：', error);
+        showNotification('文件下载失败，请重试', 'error');
+      } finally {
+        hideLoading();
+      }
     }
 
-    // 处理绩效数据上传
+    // 处理绩效数据上传（添加数据校验）
     function processPerformanceData() {
       const weekValue = elements.weekInput.value.trim();
       
@@ -687,6 +941,7 @@
         return;
       }
       
+      showLoading('解析并上传数据中...');
       const reader = new FileReader();
       
       reader.onload = function(e) {
@@ -710,6 +965,35 @@
             
             if (missingHeaders.length > 0) {
               showNotification(`绩效数据表格式不正确，缺少表头：${missingHeaders.join(', ')}`, 'error');
+              return;
+            }
+            
+            // 数据内容校验（数值范围）
+            const invalidRows = [];
+            jsonData.forEach((item, index) => {
+              const rowNum = index + 2; // 表格行号从2开始（表头+1）
+              
+              // 接待量不能为负数
+              if (parseFloat(item['接待量'] || 0) < 0) {
+                invalidRows.push(`第${rowNum}行：接待量不能为负数`);
+              }
+              
+              // 满意度需在0-100之间
+              const satisfaction = parsePercentageValue(item['满意度_剔除R']);
+              if (satisfaction < 0 || satisfaction > 1) {
+                invalidRows.push(`第${rowNum}行：满意度需在0-100%之间`);
+              }
+              
+              // 解决率需在0-100之间
+              const resolution = parsePercentageValue(item['解决率_剔除R']);
+              if (resolution < 0 || resolution > 1) {
+                invalidRows.push(`第${rowNum}行：解决率需在0-100%之间`);
+              }
+            });
+            
+            if (invalidRows.length > 0) {
+              const errorMsg = `数据校验失败（共${invalidRows.length}处错误）：\n${invalidRows.slice(0, 5).join('\n')}${invalidRows.length > 5 ? '\n...还有更多错误' : ''}`;
+              showNotification(errorMsg, 'error');
               return;
             }
           }
@@ -739,6 +1023,8 @@
         } catch (error) {
           console.error('处理绩效数据出错：', error);
           showNotification('文件解析错误，请检查文件格式', 'error');
+        } finally {
+          hideLoading();
         }
       };
       
@@ -812,7 +1098,7 @@
       });
     }
 
-    // 下载指定周的绩效数据（包含新增字段）
+    // 下载指定周的绩效数据
     function downloadPerformanceData(week) {
       const weekData = appData.performanceData[week];
       if (!weekData) {
@@ -820,80 +1106,75 @@
         return;
       }
       
-      // 获取目标值
-      const satisfactionTarget = parseFloat(elements.satisfactionTarget.value) || 83.5;
-      const resolutionTarget = parseFloat(elements.resolutionTarget.value) || 70;
+      showLoading('正在准备下载文件...');
       
-      // 计算当前周的总评价量和总解决率评价量（仅基于当前周数据）
-      let totalEvaluationCount = 0;
-      let totalResolutionEvaluationCount = 0;
-      
-      weekData.data.forEach(item => {
-        totalEvaluationCount += parseFloat(item['评价量_剔除R'] || 0);
-        totalResolutionEvaluationCount += parseFloat(item['解决率总评价量_剔除R'] || 0);
-      });
-      
-      // 处理每条数据，添加新字段
-      const processedData = weekData.data.map(item => {
-        // 从员工花名单匹配姓名和组别
-        const staffInfo = appData.staffData.find(staff => staff['ERP账号'] === item['ERP账号']) || {};
+      try {
+        // 获取目标值
+        const satisfactionTarget = parseFloat(elements.satisfactionTarget.value) || 83.5;
+        const resolutionTarget = parseFloat(elements.resolutionTarget.value) || 70;
+        const resolutionSampleTarget = parseInt(elements.resolutionSampleTarget.value) || 5;
         
-        // 处理满意度（原始值用于计算）
-        let satisfactionStr = item['满意度_剔除R'] || '0';
-        let satisfaction; // 原始值（用于计算）
-        if (typeof satisfactionStr === 'string' && satisfactionStr.includes('%')) {
-          satisfaction = parseFloat(satisfactionStr.replace('%', '')) / 100 || 0;
-        } else {
-          satisfaction = parseFloat(satisfactionStr) || 0;
-        }
+        // 计算当前周的总评价量和总解决率评价量（仅基于当前周数据）
+        let totalEvaluationCount = 0;
+        let totalResolutionEvaluationCount = 0;
         
-        // 处理解决率（原始值用于计算）
-        let resolutionStr = item['解决率_剔除R'] || '0';
-        let resolutionRate; // 原始值（用于计算）
-        if (typeof resolutionStr === 'string' && resolutionStr.includes('%')) {
-          resolutionRate = parseFloat(resolutionStr.replace('%', '')) / 100 || 0;
-        } else {
-          resolutionRate = parseFloat(resolutionStr) || 0;
-        }
+        weekData.data.forEach(item => {
+          totalEvaluationCount += parseFloat(item['评价量_剔除R'] || 0);
+          totalResolutionEvaluationCount += parseFloat(item['解决率总评价量_剔除R'] || 0);
+        });
         
-        // 计算影响值（仅基于当前周数据）
-        const evaluationCount = parseFloat(item['评价量_剔除R'] || 0);
-        const resolutionEvaluationCount = parseFloat(item['解决率总评价量_剔除R'] || 0);
+        // 处理每条数据，添加新字段
+        const processedData = weekData.data.map(item => {
+          // 从员工花名单匹配姓名和组别
+          const staffInfo = appData.staffData.find(staff => staff['ERP账号'] === item['ERP账号']) || {};
+          
+          // 解析原始值
+          const satisfaction = parsePercentageValue(item['满意度_剔除R']);
+          const resolutionRate = parsePercentageValue(item['解决率_剔除R']);
+          
+          // 计算影响值（保留12位小数）
+          const evaluationCount = parseFloat(item['评价量_剔除R'] || 0);
+          const resolutionEvaluationCount = parseFloat(item['解决率总评价量_剔除R'] || 0);
+          
+          const satisfactionImpact = calculateImpactValue(
+            satisfaction, 
+            satisfactionTarget / 100, 
+            evaluationCount, 
+            totalEvaluationCount
+          );
+          
+          const resolutionImpact = calculateImpactValue(
+            resolutionRate, 
+            resolutionTarget / 100, 
+            resolutionEvaluationCount, 
+            totalResolutionEvaluationCount
+          );
+          
+          // 构建新数据对象
+          const newItem = { ...item };
+          newItem['姓名'] = staffInfo['姓名'] || '';
+          newItem['组别'] = staffInfo['组别'] || '';
+          newItem['满意度_剔除R影响值'] = satisfactionImpact; // 原始值（12位）
+          newItem['解决率_剔除R影响值'] = resolutionImpact; // 原始值（12位）
+          
+          return newItem;
+        });
         
-        let satisfactionImpact = 0;
-        let resolutionImpact = 0;
+        // 创建工作簿并导出
+        const worksheet = XLSX.utils.json_to_sheet(processedData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, `绩效数据_${week}`);
         
-        if (totalEvaluationCount > 0) {
-          satisfactionImpact = (satisfaction - satisfactionTarget / 100) * (evaluationCount / totalEvaluationCount);
-        }
+        const fileName = `绩效数据_${week}_带影响值.xlsx`;
+        XLSX.writeFile(workbook, fileName);
         
-        if (totalResolutionEvaluationCount > 0) {
-          resolutionImpact = (resolutionRate - resolutionTarget / 100) * (resolutionEvaluationCount / totalResolutionEvaluationCount);
-        }
-        
-        // 保留小数点后6位
-        satisfactionImpact = parseFloat(satisfactionImpact.toFixed(6));
-        resolutionImpact = parseFloat(resolutionImpact.toFixed(6));
-        
-        // 构建新数据对象（保留原始字段，添加新字段）
-        const newItem = { ...item };
-        newItem['姓名'] = staffInfo['姓名'] || '';
-        newItem['组别'] = staffInfo['组别'] || '';
-        newItem['满意度_剔除R影响值'] = satisfactionImpact;
-        newItem['解决率_剔除R影响值'] = resolutionImpact;
-        
-        return newItem;
-      });
-      
-      // 创建工作簿并导出
-      const worksheet = XLSX.utils.json_to_sheet(processedData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, `绩效数据_${week}`);
-      
-      const fileName = `绩效数据_${week}_带影响值.xlsx`;
-      XLSX.writeFile(workbook, fileName);
-      
-      showNotification(`${week} 绩效数据下载成功，已包含姓名、组别和影响值`, 'success');
+        showNotification(`${week} 绩效数据下载成功，已包含姓名、组别和影响值`, 'success');
+      } catch (error) {
+        console.error('下载绩效数据失败：', error);
+        showNotification('文件下载失败，请重试', 'error');
+      } finally {
+        hideLoading();
+      }
     }
 
     // 下载绩效数据模板
@@ -922,7 +1203,7 @@
       XLSX.writeFile(workbook, '员工花名单模板.xlsx');
     }
 
-    // 生成结果数据
+    // 生成结果数据（核心优化点：新增环比计算）
     function generateResultData() {
       // 检查是否有绩效数据
       const weeks = Object.keys(appData.performanceData);
@@ -938,178 +1219,335 @@
         }
       }
       
-      // 获取目标值
-      const satisfactionTarget = parseFloat(elements.satisfactionTarget.value) || 83.5;
-      const resolutionTarget = parseFloat(elements.resolutionTarget.value) || 70;
+      showLoading('正在生成绩效数据...');
       
-      // 按周数排序绩效数据
-      const sortedWeeks = [...weeks].sort((a, b) => {
-        const weekA = parseInt(a.split('W')[1]);
-        const weekB = parseInt(b.split('W')[1]);
-        return weekA - weekB;
-      });
-      
-      // 记录当前时间周列表和最新的一周
-      appData.currentWeeks = sortedWeeks;
-      appData.latestWeek = sortedWeeks[sortedWeeks.length - 1];
-      
-      // 收集所有ERP账号（来自员工花名单）
-      const allErpAccounts = appData.staffData.map(staff => staff['ERP账号']).filter(erp => erp !== null && erp !== undefined);
-      
-      // 创建结果数据结构
-      const resultData = {};
-      
-      // 为每个员工初始化数据
-      appData.staffData.forEach(staff => {
-        const erpAccount = staff['ERP账号'];
+      try {
+        // 获取目标值
+        const satisfactionTarget = parseFloat(elements.satisfactionTarget.value) || 83.5;
+        const resolutionTarget = parseFloat(elements.resolutionTarget.value) || 70;
+        const resolutionSampleTarget = parseInt(elements.resolutionSampleTarget.value) || 5;
         
-        if (erpAccount) {
-          resultData[erpAccount] = {
-            'ERP账号': erpAccount,
-            '姓名': staff['姓名'] || '',
-            '组别': staff['组别'] || '',
-            '五级部门': '',
-            '新老员工': '',
-            '客服账号': '',
-            'V数建议': '' // V数建议字段
-          };
-        }
-      });
-      
-      // 处理每周数据
-      for (const week of sortedWeeks) {
-        const weekData = appData.performanceData[week].data;
-        
-        // 计算每周的总评价量和总解决率评价量
-        let totalEvaluationCount = 0;
-        let totalResolutionEvaluationCount = 0;
-        
-        weekData.forEach(item => {
-          totalEvaluationCount += parseFloat(item['评价量_剔除R'] || 0);
-          totalResolutionEvaluationCount += parseFloat(item['解决率总评价量_剔除R'] || 0);
+        // 按周数排序绩效数据
+        const sortedWeeks = [...weeks].sort((a, b) => {
+          const weekA = parseInt(a.split('W')[1]);
+          const weekB = parseInt(b.split('W')[1]);
+          return weekA - weekB;
         });
         
-        // 处理每个员工的数据
-        weekData.forEach(item => {
-          const erpAccount = item['ERP账号'];
+        // 记录当前时间周列表和最新的一周
+        appData.currentWeeks = sortedWeeks;
+        appData.latestWeek = sortedWeeks[sortedWeeks.length - 1];
+        
+        // 创建结果数据结构
+        const resultData = {};
+        
+        // 为每个员工初始化数据
+        appData.staffData.forEach(staff => {
+          const erpAccount = staff['ERP账号'];
           
-          // 如果员工不在结果数据中，则创建新条目
-          if (!resultData[erpAccount]) {
-            // 尝试从员工花名单中查找
-            const staffInfo = appData.staffData.find(staff => staff['ERP账号'] === erpAccount);
-            
+          if (erpAccount) {
             resultData[erpAccount] = {
               'ERP账号': erpAccount,
-              '姓名': staffInfo ? staffInfo['姓名'] || '' : '',
-              '组别': staffInfo ? staffInfo['组别'] || '' : '',
-              '五级部门': item['五级部门'] || '',
-              '新老员工': item['新老员工'] || '',
-              '客服账号': item['客服账号'] || '',
-              'V数建议': '' // V数建议字段
+              '姓名': staff['姓名'] || '',
+              '组别': staff['组别'] || '',
+              '五级部门': '',
+              '新老员工': '',
+              '客服账号': '',
+              'V数建议': ''
             };
-          } else {
-            // 更新基本信息（如果尚未设置）
-            if (!resultData[erpAccount]['五级部门']) {
-              resultData[erpAccount]['五级部门'] = item['五级部门'] || '';
-            }
-            if (!resultData[erpAccount]['新老员工']) {
-              resultData[erpAccount]['新老员工'] = item['新老员工'] || '';
-            }
-            if (!resultData[erpAccount]['客服账号']) {
-              resultData[erpAccount]['客服账号'] = item['客服账号'] || '';
-            }
           }
+        });
+        
+        // 处理每周数据
+        for (const weekIndex in sortedWeeks) {
+          const week = sortedWeeks[weekIndex];
+          const weekData = appData.performanceData[week].data;
+          const prevWeek = sortedWeeks[parseInt(weekIndex) - 1]; // 上周数据
           
-          // 处理满意度（原始值用于计算，展示时×100）
-          let satisfactionStr = item['满意度_剔除R'] || '0';
-          let satisfaction; // 原始值（用于计算）
-          if (typeof satisfactionStr === 'string' && satisfactionStr.includes('%')) {
-            // 是百分比字符串，提取数值并转换为小数
-            satisfaction = parseFloat(satisfactionStr.replace('%', '')) / 100 || 0;
-          } else {
-            // 是数字或小数字符串，直接转换
-            satisfaction = parseFloat(satisfactionStr) || 0;
-          }
-          const satisfactionDisplay = `${(satisfaction * 100).toFixed(2)}%`; // 展示值
+          // 计算每周的总评价量和总解决率评价量
+          let totalEvaluationCount = 0;
+          let totalResolutionEvaluationCount = 0;
           
-          // 处理解决率（原始值用于计算，展示时×100）
-          let resolutionStr = item['解决率_剔除R'] || '0';
-          let resolutionRate; // 原始值（用于计算）
-          if (typeof resolutionStr === 'string' && resolutionStr.includes('%')) {
-            resolutionRate = parseFloat(resolutionStr.replace('%', '')) / 100 || 0;
-          } else {
-            resolutionRate = parseFloat(resolutionStr) || 0;
-          }
-          const resolutionDisplay = `${(resolutionRate * 100).toFixed(2)}%`; // 展示值
+          weekData.forEach(item => {
+            totalEvaluationCount += parseFloat(item['评价量_剔除R'] || 0);
+            totalResolutionEvaluationCount += parseFloat(item['解决率总评价量_剔除R'] || 0);
+          });
           
-          const 接待量 = parseFloat(item['接待量'] || 0);
-          const evaluationCount = parseFloat(item['评价量_剔除R'] || 0);
-          const resolutionEvaluationCount = parseFloat(item['解决率总评价量_剔除R'] || 0);
-          
-          // 计算影响值（使用原始值）
-          let satisfactionImpact = 0;
-          let resolutionImpact = 0;
-          
-          if (totalEvaluationCount > 0) {
-            satisfactionImpact = (satisfaction - satisfactionTarget / 100) * (evaluationCount / totalEvaluationCount);
-          }
-          
-          if (totalResolutionEvaluationCount > 0) {
-            resolutionImpact = (resolutionRate - resolutionTarget / 100) * (resolutionEvaluationCount / totalResolutionEvaluationCount);
-          }
-          
-          // 保留小数点后6位
-          satisfactionImpact = parseFloat(satisfactionImpact.toFixed(6));
-          resolutionImpact = parseFloat(resolutionImpact.toFixed(6));
-          
-          // 存储每周数据（原始值和展示值）
-          resultData[erpAccount][`${week}_接待量`] = 接待量;
-          resultData[erpAccount][`${week}_满意度_剔除R`] = satisfactionDisplay;
-          resultData[erpAccount][`${week}_满意度_原始值`] = satisfaction; // 保存原始值用于排序
-          resultData[erpAccount][`${week}_满意度影响值`] = satisfactionImpact;
-          resultData[erpAccount][`${week}_解决率_剔除R`] = resolutionDisplay;
-          resultData[erpAccount][`${week}_解决率_原始值`] = resolutionRate; // 保存原始值用于排序
-          resultData[erpAccount][`${week}_解决率影响值`] = resolutionImpact;
-          
-          // 如果是最新一周，计算V数建议
-          if (week === appData.latestWeek) {
-            if (satisfactionImpact > 0) {
-              resultData[erpAccount]['V数建议'] = '建议升V';
-            } else if (satisfactionImpact < 0) {
-              resultData[erpAccount]['V数建议'] = '建议降V';
+          // 处理每个员工的数据
+          weekData.forEach(item => {
+            const erpAccount = item['ERP账号'];
+            
+            // 如果员工不在结果数据中，则创建新条目
+            if (!resultData[erpAccount]) {
+              // 尝试从员工花名单中查找
+              const staffInfo = appData.staffData.find(staff => staff['ERP账号'] === erpAccount);
+              
+              resultData[erpAccount] = {
+                'ERP账号': erpAccount,
+                '姓名': staffInfo ? staffInfo['姓名'] || '' : '',
+                '组别': staffInfo ? staffInfo['组别'] || '' : '',
+                '五级部门': item['五级部门'] || '',
+                '新老员工': item['新老员工'] || '',
+                '客服账号': item['客服账号'] || '',
+                'V数建议': ''
+              };
             } else {
-              resultData[erpAccount]['V数建议'] = '建议保持';
+              // 更新基本信息（如果尚未设置）
+              if (!resultData[erpAccount]['五级部门']) {
+                resultData[erpAccount]['五级部门'] = item['五级部门'] || '';
+              }
+              if (!resultData[erpAccount]['新老员工']) {
+                resultData[erpAccount]['新老员工'] = item['新老员工'] || '';
+              }
+              if (!resultData[erpAccount]['客服账号']) {
+                resultData[erpAccount]['客服账号'] = item['客服账号'] || '';
+              }
             }
+            
+            // 解析原始值
+            const satisfaction = parsePercentageValue(item['满意度_剔除R']);
+            const resolutionRate = parsePercentageValue(item['解决率_剔除R']);
+            const 接待量 = parseFloat(item['接待量'] || 0);
+            
+            // 提取新增字段
+            const 满意量_剔除R = parseFloat(item['满意量_剔除R'] || 0);
+            const 评价量_剔除R = parseFloat(item['评价量_剔除R'] || 0);
+            const 已解决量_剔除R = parseFloat(item['已解决量_剔除R'] || 0);
+            const 解决率总评价量_剔除R = parseFloat(item['解决率总评价量_剔除R'] || 0);
+            
+            // 计算影响值（保留12位小数）
+            const satisfactionImpact = calculateImpactValue(
+              satisfaction, 
+              satisfactionTarget / 100, 
+              评价量_剔除R, 
+              totalEvaluationCount
+            );
+            
+            const resolutionImpact = calculateImpactValue(
+              resolutionRate, 
+              resolutionTarget / 100, 
+              解决率总评价量_剔除R, 
+              totalResolutionEvaluationCount
+            );
+            
+            // 存储每周数据（原始值和展示值）
+            resultData[erpAccount][`${week}_接待量`] = 接待量;
+            resultData[erpAccount][`${week}_满意度_剔除R`] = `${(satisfaction * 100).toFixed(2)}%`;
+            resultData[erpAccount][`${week}_满意度_原始值`] = satisfaction; // 用于排序和比较
+            resultData[erpAccount][`${week}_满意量_剔除R`] = 满意量_剔除R;
+            resultData[erpAccount][`${week}_评价量_剔除R`] = 评价量_剔除R; // 数据字段名保持不变
+            resultData[erpAccount][`${week}_满意度影响值`] = satisfactionImpact; // 12位原始值
+            
+            resultData[erpAccount][`${week}_解决率_剔除R`] = `${(resolutionRate * 100).toFixed(2)}%`;
+            resultData[erpAccount][`${week}_解决率_原始值`] = resolutionRate; // 用于排序和比较
+            resultData[erpAccount][`${week}_已解决量_剔除R`] = 已解决量_剔除R;
+            resultData[erpAccount][`${week}_解决率总评价量_剔除R`] = 解决率总评价量_剔除R; // 数据字段名保持不变
+            resultData[erpAccount][`${week}_解决率影响值`] = resolutionImpact; // 12位原始值
+            
+            // 计算与上周的对比（如果有上周数据）
+            if (prevWeek && resultData[erpAccount][`${prevWeek}_接待量`] !== undefined) {
+              // 接待量对比
+              const prevVolume = resultData[erpAccount][`${prevWeek}_接待量`];
+              const volumeDiff = 接待量 - prevVolume;
+              const volumeDiffRate = prevVolume > 0 ? (volumeDiff / prevVolume) : 0;
+              resultData[erpAccount][`${week}_接待量_环比`] = {
+                diff: volumeDiff,
+                rate: volumeDiffRate
+              };
+              
+              // 满意度对比
+              const prevSatisfaction = resultData[erpAccount][`${prevWeek}_满意度_原始值`];
+              const satisfactionDiff = satisfaction - prevSatisfaction;
+              const satisfactionDiffRate = prevSatisfaction > 0 ? (satisfactionDiff / prevSatisfaction) : 0;
+              resultData[erpAccount][`${week}_满意度_环比`] = {
+                diff: satisfactionDiff,
+                rate: satisfactionDiffRate,
+                displayDiff: `${(satisfactionDiff * 100).toFixed(2)}%`
+              };
+              
+              // 解决率对比
+              const prevResolution = resultData[erpAccount][`${prevWeek}_解决率_原始值`];
+              const resolutionDiff = resolutionRate - prevResolution;
+              const resolutionDiffRate = prevResolution > 0 ? (resolutionDiff / prevResolution) : 0;
+              resultData[erpAccount][`${week}_解决率_环比`] = {
+                diff: resolutionDiff,
+                rate: resolutionDiffRate,
+                displayDiff: `${(resolutionDiff * 100).toFixed(2)}%`
+              };
+              
+              // 满意度样本量（评价量_剔除R）对比 - 新增
+              const prevEvaluationCount = resultData[erpAccount][`${prevWeek}_评价量_剔除R`] || 0;
+              const evaluationCountDiff = 评价量_剔除R - prevEvaluationCount;
+              const evaluationCountDiffRate = prevEvaluationCount > 0 ? (evaluationCountDiff / prevEvaluationCount) : 0;
+              resultData[erpAccount][`${week}_评价量_剔除R_环比`] = {
+                diff: evaluationCountDiff,
+                rate: evaluationCountDiffRate
+              };
+              
+              // 满意度影响值对比 - 新增
+              const prevSatisfactionImpact = resultData[erpAccount][`${prevWeek}_满意度影响值`] || 0;
+              const satisfactionImpactDiff = satisfactionImpact - prevSatisfactionImpact;
+              const satisfactionImpactDiffRate = prevSatisfactionImpact !== 0 ? (satisfactionImpactDiff / prevSatisfactionImpact) : 0;
+              resultData[erpAccount][`${week}_满意度影响值_环比`] = {
+                diff: satisfactionImpactDiff,
+                rate: satisfactionImpactDiffRate,
+                displayDiff: formatImpactValue(satisfactionImpactDiff)
+              };
+              
+              // 解决率样本量（解决率总评价量_剔除R）对比 - 新增
+              const prevResolutionEvaluationCount = resultData[erpAccount][`${prevWeek}_解决率总评价量_剔除R`] || 0;
+              const resolutionEvaluationCountDiff = 解决率总评价量_剔除R - prevResolutionEvaluationCount;
+              const resolutionEvaluationCountDiffRate = prevResolutionEvaluationCount > 0 ? (resolutionEvaluationCountDiff / prevResolutionEvaluationCount) : 0;
+              resultData[erpAccount][`${week}_解决率总评价量_剔除R_环比`] = {
+                diff: resolutionEvaluationCountDiff,
+                rate: resolutionEvaluationCountDiffRate
+              };
+              
+              // 解决率影响值对比 - 新增
+              const prevResolutionImpact = resultData[erpAccount][`${prevWeek}_解决率影响值`] || 0;
+              const resolutionImpactDiff = resolutionImpact - prevResolutionImpact;
+              const resolutionImpactDiffRate = prevResolutionImpact !== 0 ? (resolutionImpactDiff / prevResolutionImpact) : 0;
+              resultData[erpAccount][`${week}_解决率影响值_环比`] = {
+                diff: resolutionImpactDiff,
+                rate: resolutionImpactDiffRate,
+                displayDiff: formatImpactValue(resolutionImpactDiff)
+              };
+            }
+            
+            // 如果是最新一周，计算V数建议
+            if (week === appData.latestWeek) {
+              if (satisfactionImpact > 0) {
+                resultData[erpAccount]['V数建议'] = '建议升V';
+              } else if (satisfactionImpact < 0) {
+                resultData[erpAccount]['V数建议'] = '建议降V';
+              } else {
+                resultData[erpAccount]['V数建议'] = '建议保持';
+              }
+            }
+          });
+        }
+        
+        // 转换为数组并保存
+        appData.resultData = Object.values(resultData);
+        appData.filteredResultData = [...appData.resultData];
+        
+        // 生成表头
+        generateResultHeaders(sortedWeeks);
+        
+        // 初始化表头可见性（默认全显示）
+        initHeaderVisibility();
+        
+        // 生成表头控制复选框
+        generateHeaderCheckboxes();
+        
+        // 初始化排序选项
+        initSortOptions();
+        
+        // 重置页码
+        appData.currentPage = 1;
+        
+        // 应用默认排序（最新一周接待量降序）
+        applyDefaultSort();
+        
+        // 应用默认的五级部门筛选
+        applyFilter();
+        
+        // 显示结果
+        displayResultData(sortedWeeks);
+        
+        showNotification('绩效数据生成成功', 'success');
+      } catch (error) {
+        console.error('生成绩效数据失败：', error);
+        showNotification('数据生成失败，请重试', 'error');
+      } finally {
+        hideLoading();
+      }
+    }
+
+    // 初始化表头可见性设置
+    function initHeaderVisibility() {
+      // 如果没有保存的设置，默认全显示
+      if (Object.keys(appData.headerVisibility).length === 0) {
+        appData.resultHeaders.forEach(header => {
+          appData.headerVisibility[header] = true;
+        });
+      } else {
+        // 确保新表头有默认值
+        appData.resultHeaders.forEach(header => {
+          if (appData.headerVisibility[header] === undefined) {
+            appData.headerVisibility[header] = true;
           }
         });
       }
+    }
+
+    // 生成表头控制复选框
+    function generateHeaderCheckboxes() {
+      elements.headerCheckboxes.innerHTML = '';
       
-      // 转换为数组并保存
-      appData.resultData = Object.values(resultData);
-      appData.filteredResultData = [...appData.resultData];
+      appData.resultHeaders.forEach(header => {
+        const checkboxId = `header_${header.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        const label = document.createElement('label');
+        label.className = 'flex items-center gap-2 cursor-pointer';
+        label.innerHTML = `
+          <input type="checkbox" id="${checkboxId}" class="header-checkbox" ${appData.headerVisibility[header] ? 'checked' : ''}>
+          <span class="text-sm">${header}</span>
+        `;
+        label.querySelector('input').setAttribute('data-header', header);
+        elements.headerCheckboxes.appendChild(label);
+      });
+    }
+
+    // 切换表头设置面板显示
+    function toggleHeaderSettingsPanel() {
+      elements.headerSettingsPanel.classList.toggle('hidden');
+    }
+
+    // 全选/取消全选表头
+    function selectAllHeaders() {
+      const checkboxes = elements.headerCheckboxes.querySelectorAll('input');
+      const allChecked = [...checkboxes].every(cb => cb.checked);
       
-      // 生成表头
-      generateResultHeaders(sortedWeeks);
+      checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+      });
+    }
+
+    // 应用表头设置
+    function applyHeaderSettings() {
+      const checkboxes = elements.headerCheckboxes.querySelectorAll('input');
       
-      // 初始化排序选项
-      initSortOptions();
+      checkboxes.forEach(cb => {
+        const header = cb.getAttribute('data-header');
+        appData.headerVisibility[header] = cb.checked;
+      });
       
-      // 应用默认排序（最新一周接待量降序）
-      applyDefaultSort();
-      
-      // 应用默认的五级部门筛选
-      applyFilter();
-      
-      // 显示结果
-      displayResultData(sortedWeeks);
-      
-      showNotification('绩效数据生成成功', 'success');
+      saveToLocalStorage();
+      displayResultData(appData.currentWeeks);
+      toggleHeaderSettingsPanel();
+      showNotification('表头设置已应用', 'success');
     }
 
     // 初始化排序选项
     function initSortOptions() {
       // 清空现有选项
       elements.sortField.innerHTML = '';
+      
+      // 添加基础排序字段
+      const baseOptions = [
+        { value: 'ERP账号', text: 'ERP账号' },
+        { value: '姓名', text: '姓名' },
+        { value: '组别', text: '组别' },
+        { value: '五级部门', text: '五级部门' },
+        { value: 'V数建议', text: 'V数建议' }
+      ];
+      
+      baseOptions.forEach(option => {
+        const opt = document.createElement('option');
+        opt.value = option.value;
+        opt.textContent = option.text;
+        elements.sortField.appendChild(opt);
+      });
       
       // 为每个时间周添加排序选项
       appData.currentWeeks.forEach(week => {
@@ -1126,11 +1564,29 @@
         satisfactionOption.textContent = `周${weekNum}_满意度`;
         elements.sortField.appendChild(satisfactionOption);
         
+        // 满意度样本量
+        const satisfactionSampleOption = document.createElement('option');
+        satisfactionSampleOption.value = `${week}_评价量_剔除R`;
+        satisfactionSampleOption.textContent = `周${weekNum}_满意度样本量`;
+        elements.sortField.appendChild(satisfactionSampleOption);
+        
         // 满意度影响值
         const satisfactionImpactOption = document.createElement('option');
         satisfactionImpactOption.value = `${week}_满意度影响值`;
         satisfactionImpactOption.textContent = `周${weekNum}_满意度影响值`;
         elements.sortField.appendChild(satisfactionImpactOption);
+        
+        // 解决率（使用原始值排序）
+        const resolutionOption = document.createElement('option');
+        resolutionOption.value = `${week}_解决率_原始值`;
+        resolutionOption.textContent = `周${weekNum}_解决率`;
+        elements.sortField.appendChild(resolutionOption);
+        
+        // 解决率样本量
+        const resolutionSampleOption = document.createElement('option');
+        resolutionSampleOption.value = `${week}_解决率总评价量_剔除R`;
+        resolutionSampleOption.textContent = `周${weekNum}_解决率样本量`;
+        elements.sortField.appendChild(resolutionSampleOption);
         
         // 解决率影响值
         const resolutionImpactOption = document.createElement('option');
@@ -1154,7 +1610,7 @@
       const sortField = elements.sortField.value;
       const sortDirection = elements.sortDirection.value;
       
-      if (!sortField) return;
+      if (!sortField || appData.filteredResultData.length === 0) return;
       
       // 对筛选后的数据进行排序
       appData.filteredResultData.sort((a, b) => {
@@ -1172,6 +1628,9 @@
           : String(valueB).localeCompare(String(valueA));
       });
       
+      // 重置到第一页
+      appData.currentPage = 1;
+      
       // 重新显示数据
       displayResultData(appData.currentWeeks);
     }
@@ -1184,35 +1643,25 @@
       const group = elements.groupFilter.value.trim().toLowerCase();
       const vSuggestion = elements.vSuggestionFilter.value;
       
-      // 过滤数据
-      appData.filteredResultData = appData.resultData.filter(row => {
-        // 五级部门筛选
-        if (dept && !String(row['五级部门'] || '').toLowerCase().includes(dept)) {
-          return false;
-        }
-        
-        // ERP账号筛选
-        if (erp && !String(row['ERP账号'] || '').toLowerCase().includes(erp)) {
-          return false;
-        }
-        
-        // 姓名筛选
-        if (name && !String(row['姓名'] || '').toLowerCase().includes(name)) {
-          return false;
-        }
-        
-        // 组别筛选
-        if (group && !String(row['组别'] || '').toLowerCase().includes(group)) {
-          return false;
-        }
-        
-        // V数建议筛选
-        if (vSuggestion && row['V数建议'] !== vSuggestion) {
-          return false;
-        }
-        
-        return true;
-      });
+      // 快速返回全量数据
+      if (!dept && !erp && !name && !group && !vSuggestion) {
+        appData.filteredResultData = [...appData.resultData];
+      } else {
+        // 过滤数据
+        appData.filteredResultData = appData.resultData.filter(row => {
+          // 短路逻辑优化
+          if (dept && !String(row['五级部门'] || '').toLowerCase().includes(dept)) return false;
+          if (erp && !String(row['ERP账号'] || '').toLowerCase().includes(erp)) return false;
+          if (name && !String(row['姓名'] || '').toLowerCase().includes(name)) return false;
+          if (group && !String(row['组别'] || '').toLowerCase().includes(group)) return false;
+          if (vSuggestion && row['V数建议'] !== vSuggestion) return false;
+          
+          return true;
+        });
+      }
+      
+      // 重置到第一页
+      appData.currentPage = 1;
       
       // 重新应用当前排序
       applySort();
@@ -1230,58 +1679,223 @@
       
       // 恢复所有数据并应用默认的五级部门筛选
       appData.filteredResultData = [...appData.resultData];
+      
+      // 重置到第一页
+      appData.currentPage = 1;
+      
       applyFilter();
     }
 
-    // 生成结果表头
+    // 生成结果表头（核心优化点：增加新环比列）
     function generateResultHeaders(weeks) {
-      // 基础表头，包含V数建议
+      // 基础表头
       const baseHeaders = ['ERP账号', '姓名', '客服账号', '五级部门', '组别', '新老员工', 'V数建议'];
       
-      // 每周的表头
+      // 每周的表头（按需求顺序）
       const weekHeaders = [];
       weeks.forEach(week => {
         weekHeaders.push(
           `${week}_接待量`,
+          `${week}_接待量_环比`,
           `${week}_满意度_剔除R`,
+          `${week}_满意度_环比`,
+          `${week}_评价量_剔除R`,
+          `${week}_评价量_剔除R_环比`, // 新增：满意度样本量环比
           `${week}_满意度影响值`,
+          `${week}_满意度影响值_环比`, // 新增：满意度影响值环比
           `${week}_解决率_剔除R`,
-          `${week}_解决率影响值`
+          `${week}_解决率_环比`,
+          `${week}_解决率总评价量_剔除R`,
+          `${week}_解决率总评价量_剔除R_环比`, // 新增：解决率样本量环比
+          `${week}_解决率影响值`,
+          `${week}_解决率影响值_环比` // 新增：解决率影响值环比
         );
       });
       
       appData.resultHeaders = [...baseHeaders, ...weekHeaders];
     }
 
-    // 显示结果数据
+    // 计算分页信息
+    function calculatePagination() {
+      appData.totalPages = Math.ceil(appData.filteredResultData.length / appData.pageSize);
+      
+      // 确保当前页在有效范围内
+      if (appData.currentPage > appData.totalPages) {
+        appData.currentPage = Math.max(1, appData.totalPages);
+      }
+      
+      // 更新分页控件状态
+      updatePaginationControls();
+    }
+
+    // 更新分页控件
+    function updatePaginationControls() {
+      // 更新计数显示
+      const start = (appData.currentPage - 1) * appData.pageSize + 1;
+      const end = Math.min(start + appData.pageSize - 1, appData.filteredResultData.length);
+      elements.currentPageRange.textContent = `${start}-${end}`;
+      elements.totalItemsCount.textContent = appData.filteredResultData.length;
+      
+      // 更新按钮状态
+      elements.prevPageBtn.disabled = appData.currentPage <= 1;
+      elements.nextPageBtn.disabled = appData.currentPage >= appData.totalPages;
+      
+      // 生成页码
+      generatePageNumbers();
+    }
+
+    // 生成页码
+    function generatePageNumbers() {
+      elements.pageNumbers.innerHTML = '';
+      
+      // 最多显示10个页码
+      const maxVisiblePages = 10;
+      let startPage = Math.max(1, appData.currentPage - Math.floor(maxVisiblePages / 2));
+      let endPage = startPage + maxVisiblePages - 1;
+      
+      // 调整结束页
+      if (endPage > appData.totalPages) {
+        endPage = appData.totalPages;
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+      }
+      
+      // 添加第一页
+      if (startPage > 1) {
+        addPageNumber(1);
+        
+        // 添加省略号
+        if (startPage > 2) {
+          const ellipsis = document.createElement('span');
+          ellipsis.className = 'px-2 text-gray-500';
+          ellipsis.textContent = '...';
+          elements.pageNumbers.appendChild(ellipsis);
+        }
+      }
+      
+      // 添加可见页码
+      for (let i = startPage; i <= endPage; i++) {
+        addPageNumber(i);
+      }
+      
+      // 添加最后一页
+      if (endPage < appData.totalPages) {
+        // 添加省略号
+        if (endPage < appData.totalPages - 1) {
+          const ellipsis = document.createElement('span');
+          ellipsis.className = 'px-2 text-gray-500';
+          ellipsis.textContent = '...';
+          elements.pageNumbers.appendChild(ellipsis);
+        }
+        
+        addPageNumber(appData.totalPages);
+      }
+    }
+
+    // 添加页码
+    function addPageNumber(pageNum) {
+      const pageBtn = document.createElement('button');
+      pageBtn.className = `px-3 py-1 rounded-md text-sm ${
+        appData.currentPage === pageNum 
+          ? 'bg-primary text-white' 
+          : 'border border-gray-300 hover:bg-gray-50'
+      }`;
+      pageBtn.textContent = pageNum;
+      pageBtn.addEventListener('click', () => {
+        appData.currentPage = pageNum;
+        displayResultData(appData.currentWeeks);
+      });
+      elements.pageNumbers.appendChild(pageBtn);
+    }
+
+    // 上一页
+    function goToPrevPage() {
+      if (appData.currentPage > 1) {
+        appData.currentPage--;
+        displayResultData(appData.currentWeeks);
+      }
+    }
+
+    // 下一页
+    function goToNextPage() {
+      if (appData.currentPage < appData.totalPages) {
+        appData.currentPage++;
+        displayResultData(appData.currentWeeks);
+      }
+    }
+
+    // 显示结果数据（核心优化点：增加新环比列显示，解决率样本量颜色控制）
     let showAllWeeks = false;
     function displayResultData(weeks) {
+      // 获取解决率样本量目标值
+      const resolutionSampleTarget = parseInt(elements.resolutionSampleTarget.value) || 5;
+      
+      // 计算分页
+      calculatePagination();
+      
+      // 显示空状态
+      if (appData.filteredResultData.length === 0) {
+        elements.tableEmptyState.classList.remove('hidden');
+        elements.resultTableBody.innerHTML = '';
+        return;
+      } else {
+        elements.tableEmptyState.classList.add('hidden');
+      }
+      
       // 更新计数显示
       elements.totalWeeksCount.textContent = weeks.length;
       elements.visibleWeeksCount.textContent = Math.min(weeks.length, 5);
       
-      // 生成表头
+      // 获取当前页数据
+      const startIndex = (appData.currentPage - 1) * appData.pageSize;
+      const endIndex = startIndex + appData.pageSize;
+      const currentPageData = appData.filteredResultData.slice(startIndex, endIndex);
+      
+      // 获取目标值
+      const satisfactionTarget = parseFloat(elements.satisfactionTarget.value) || 83.5;
+      const resolutionTarget = parseFloat(elements.resolutionTarget.value) || 70;
+      
+      // 生成表头（考虑可见性）
       let headerHtml = '';
       
-      // 基础表头，包含V数建议
-      ['ERP账号', '姓名', '客服账号', '五级部门', '组别', '新老员工', 'V数建议'].forEach(header => {
-        headerHtml += `<th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">${header}</th>`;
+      // 基础表头 - 带锁定
+      const baseFields = ['ERP账号', '姓名', '客服账号', '五级部门', '组别', '新老员工', 'V数建议'];
+      baseFields.forEach((field, index) => {
+        if (!appData.headerVisibility[field]) return;
+        
+        headerHtml += `<th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap sticky-column sticky-column-${index + 1} bg-gray-50">${field}</th>`;
       });
       
-      // 每周的表头
+      // 每周的表头 - 核心修改：增加新环比列
       weeks.forEach((week, index) => {
-        // 确定是否显示该周数据
         const shouldShow = showAllWeeks || index >= weeks.length - 5;
         const weekClass = shouldShow ? '' : 'hidden extra-week';
-        const weekNum = week.split('W')[1];
+        const weekNum = week.split('W')[1]; // 提取W后面的数字部分，用于表头显示
         
-        headerHtml += `
-          <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass}" data-week="${week}">周${weekNum}_接待量</th>
-          <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass}" data-week="${week}">周${weekNum}_满意度</th>
-          <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass}" data-week="${week}">周${weekNum}_满意度影响值</th>
-          <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass}" data-week="${week}">周${weekNum}_解决率</th>
-          <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass}" data-week="${week}">周${weekNum}_解决率影响值</th>
-        `;
+        // 按需求顺序生成每周表头（考虑可见性），增加新环比列
+        const weekHeaders = [
+          { field: `${week}_接待量`, label: `周${weekNum}_接待量` },
+          { field: `${week}_接待量_环比`, label: '环比' },
+          { field: `${week}_满意度_剔除R`, label: `周${weekNum}_满意度` },
+          { field: `${week}_满意度_环比`, label: '环比' },
+          { field: `${week}_评价量_剔除R`, label: `周${weekNum}_满意度样本量` },
+          { field: `${week}_评价量_剔除R_环比`, label: '环比' }, // 新增
+          { field: `${week}_满意度影响值`, label: `周${weekNum}_满意度影响值` },
+          { field: `${week}_满意度影响值_环比`, label: '环比' }, // 新增
+          { field: `${week}_解决率_剔除R`, label: `周${weekNum}_解决率` },
+          { field: `${week}_解决率_环比`, label: '环比' },
+          { field: `${week}_解决率总评价量_剔除R`, label: `周${weekNum}_解决率样本量` },
+          { field: `${week}_解决率总评价量_剔除R_环比`, label: '环比' }, // 新增
+          { field: `${week}_解决率影响值`, label: `周${weekNum}_解决率影响值` },
+          { field: `${week}_解决率影响值_环比`, label: '环比' } // 新增
+        ];
+        
+        weekHeaders.forEach(({ field, label }) => {
+          if (!appData.headerVisibility[field]) return;
+          
+          headerHtml += `
+            <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass}" data-week="${week}">${label}</th>
+          `;
+        });
       });
       
       elements.resultTableHeader.innerHTML = headerHtml;
@@ -1289,62 +1903,170 @@
       // 生成表格内容
       let bodyHtml = '';
       
-      if (appData.filteredResultData.length === 0) {
-        bodyHtml = `
-          <tr>
-            <td colspan="${appData.resultHeaders.length}" class="px-4 py-8 text-center text-gray-500">没有符合条件的数据</td>
-          </tr>
-        `;
-      } else {
-        appData.filteredResultData.forEach((row, rowIndex) => {
-          let rowHtml = `<tr class="${rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 transition-colors">`;
+      currentPageData.forEach((row, rowIndex) => {
+        let rowHtml = `<tr class="${rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 transition-colors">`;
+        
+        // 基础数据 - 带锁定
+        baseFields.forEach((field, index) => {
+          if (!appData.headerVisibility[field]) return;
           
-          // 基础数据，包含V数建议并添加样式
-          ['ERP账号', '姓名', '客服账号', '五级部门', '组别', '新老员工', 'V数建议'].forEach(field => {
-            let cellContent = row[field] || '-';
-            let cellClass = 'px-3 py-2 text-sm whitespace-nowrap';
-            
-            // 为V数建议添加不同的颜色
-            if (field === 'V数建议') {
-              cellClass += ' font-medium';
-              switch(cellContent) {
-                case '建议升V':
-                  cellClass += ' text-success';
-                  break;
-                case '建议降V':
-                  cellClass += ' text-danger';
-                  break;
-                case '建议保持':
-                  cellClass += ' text-warning';
-                  break;
-                default:
-                  cellClass += ' text-gray-700';
-              }
-            } else {
-              cellClass += ' text-gray-700';
+          let cellContent = row[field] || '-';
+          let cellClass = `px-3 py-2 text-sm whitespace-nowrap sticky-column sticky-column-${index + 1}`;
+          
+          // 为V数建议添加不同的颜色
+          if (field === 'V数建议') {
+            cellClass += ' font-medium';
+            switch(cellContent) {
+              case '建议升V':
+                cellClass += ' text-success';
+                break;
+              case '建议降V':
+                cellClass += ' text-danger';
+                break;
+              case '建议保持':
+                cellClass += ' text-warning';
+                break;
+              default:
+                cellClass += ' text-gray-700';
             }
-            
-            rowHtml += `<td class="${cellClass}">${cellContent}</td>`;
-          });
+          } else {
+            cellClass += ' text-gray-700';
+          }
           
-          // 每周的数据
-          weeks.forEach((week, index) => {
-            const shouldShow = showAllWeeks || index >= weeks.length - 5;
-            const weekClass = shouldShow ? '' : 'hidden extra-week';
-            
-            rowHtml += `
-              <td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap ${weekClass}" data-week="${week}">${row[`${week}_接待量`] || '-'}</td>
-              <td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap ${weekClass}" data-week="${week}">${row[`${week}_满意度_剔除R`] || '-'}</td>
-              <td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap ${weekClass}" data-week="${week}">${row[`${week}_满意度影响值`] !== undefined ? row[`${week}_满意度影响值`] : '-'}</td>
-              <td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap ${weekClass}" data-week="${week}">${row[`${week}_解决率_剔除R`] || '-'}</td>
-              <td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap ${weekClass}" data-week="${week}">${row[`${week}_解决率影响值`] !== undefined ? row[`${week}_解决率影响值`] : '-'}</td>
-            `;
-          });
-          
-          rowHtml += `</tr>`;
-          bodyHtml += rowHtml;
+          rowHtml += `<td class="${cellClass}">${cellContent}</td>`;
         });
-      }
+        
+        // 每周的数据
+        weeks.forEach((week, index) => {
+          const shouldShow = showAllWeeks || index >= weeks.length - 5;
+          const weekClass = shouldShow ? '' : 'hidden extra-week';
+          
+          // 按需求顺序生成每周数据单元格（考虑可见性），增加新环比列
+          const weekFields = [
+            { 
+              field: `${week}_接待量`, 
+              render: (value) => value || '-' 
+            },
+            { 
+              field: `${week}_接待量_环比`, 
+              render: (value) => {
+                if (!value) return '-';
+                const diff = value.diff.toFixed(1);
+                const rate = `${(value.rate * 100).toFixed(1)}%`;
+                const isUp = value.diff > 0;
+                return `<span class="${isUp ? 'compare-up' : 'compare-down'}">${isUp ? '↑' : '↓'}${diff} (${rate})</span>`;
+              }
+            },
+            { 
+              field: `${week}_满意度_剔除R`, 
+              render: (value, row) => {
+                if (!value) return '-';
+                // 获取原始值并与目标值比较
+                const satisfactionValue = row[`${week}_满意度_原始值`] * 100;
+                const isAboveTarget = satisfactionValue >= satisfactionTarget;
+                return `<span class="${isAboveTarget ? 'text-success' : 'text-danger'}">${value}</span>`;
+              }
+            },
+            { 
+              field: `${week}_满意度_环比`, 
+              render: (value) => {
+                if (!value) return '-';
+                const rate = `${(value.rate * 100).toFixed(1)}%`;
+                const isUp = value.diff > 0;
+                return `<span class="${isUp ? 'compare-up' : 'compare-down'}">${isUp ? '↑' : '↓'}${value.displayDiff} (${rate})</span>`;
+              }
+            },
+            { 
+              field: `${week}_评价量_剔除R`, 
+              render: (value) => value || '-' 
+            },
+            { 
+              field: `${week}_评价量_剔除R_环比`, 
+              render: (value) => {
+                if (!value) return '-';
+                const diff = value.diff.toFixed(1);
+                const rate = `${(value.rate * 100).toFixed(1)}%`;
+                const isUp = value.diff > 0;
+                return `<span class="${isUp ? 'compare-up' : 'compare-down'}">${isUp ? '↑' : '↓'}${diff} (${rate})</span>`;
+              }
+            },
+            { 
+              field: `${week}_满意度影响值`, 
+              render: (value) => value !== undefined ? formatImpactValue(value) : '-' 
+            },
+            { 
+              field: `${week}_满意度影响值_环比`, 
+              render: (value) => {
+                if (!value) return '-';
+                const rate = `${(value.rate * 100).toFixed(1)}%`;
+                const isUp = value.diff > 0;
+                return `<span class="${isUp ? 'compare-up' : 'compare-down'}">${isUp ? '↑' : '↓'}${value.displayDiff} (${rate})</span>`;
+              }
+            },
+            { 
+              field: `${week}_解决率_剔除R`, 
+              render: (value, row) => {
+                if (!value) return '-';
+                // 获取原始值并与目标值比较
+                const resolutionValue = row[`${week}_解决率_原始值`] * 100;
+                const isAboveTarget = resolutionValue >= resolutionTarget;
+                return `<span class="${isAboveTarget ? 'text-success' : 'text-danger'}">${value}</span>`;
+              }
+            },
+            { 
+              field: `${week}_解决率_环比`, 
+              render: (value) => {
+                if (!value) return '-';
+                const rate = `${(value.rate * 100).toFixed(1)}%`;
+                const isUp = value.diff > 0;
+                return `<span class="${isUp ? 'compare-up' : 'compare-down'}">${isUp ? '↑' : '↓'}${value.displayDiff} (${rate})</span>`;
+              }
+            },
+            { 
+              field: `${week}_解决率总评价量_剔除R`, 
+              render: (value) => {
+                if (value === undefined || value === '-') return '-';
+                // 与目标值比较设置颜色
+                const isAboveTarget = value >= resolutionSampleTarget;
+                return `<span class="${isAboveTarget ? 'text-success' : 'text-danger'} font-medium">${value}</span>`;
+              }
+            },
+            { 
+              field: `${week}_解决率总评价量_剔除R_环比`, 
+              render: (value) => {
+                if (!value) return '-';
+                const diff = value.diff.toFixed(1);
+                const rate = `${(value.rate * 100).toFixed(1)}%`;
+                const isUp = value.diff > 0;
+                return `<span class="${isUp ? 'compare-up' : 'compare-down'}">${isUp ? '↑' : '↓'}${diff} (${rate})</span>`;
+              }
+            },
+            { 
+              field: `${week}_解决率影响值`, 
+              render: (value) => value !== undefined ? formatImpactValue(value) : '-' 
+            },
+            { 
+              field: `${week}_解决率影响值_环比`, 
+              render: (value) => {
+                if (!value) return '-';
+                const rate = `${(value.rate * 100).toFixed(1)}%`;
+                const isUp = value.diff > 0;
+                return `<span class="${isUp ? 'compare-up' : 'compare-down'}">${isUp ? '↑' : '↓'}${value.displayDiff} (${rate})</span>`;
+              }
+            }
+          ];
+          
+          weekFields.forEach(({ field, render }) => {
+            if (!appData.headerVisibility[field]) return;
+            
+            const value = row[field];
+            rowHtml += `<td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap ${weekClass}" data-week="${week}">${render(value, row)}</td>`;
+          });
+        });
+        
+        rowHtml += `</tr>`;
+        bodyHtml += rowHtml;
+      });
       
       elements.resultTableBody.innerHTML = bodyHtml;
       
@@ -1370,45 +2092,91 @@
       displayResultData(appData.currentWeeks);
     }
 
-    // 导出结果数据（筛选后的）
+    // 导出结果数据（核心优化点：包含新增的环比数据）
     function exportResultData() {
       if (appData.filteredResultData.length === 0) {
         showNotification('没有可导出的数据', 'warning');
         return;
       }
       
-      // 准备导出数据（包含所有周和V数建议，处理周数据格式）
-      const exportData = appData.filteredResultData.map(row => {
-        const exportRow = {};
-        
-        // 复制基础字段
-        ['ERP账号', '姓名', '客服账号', '五级部门', '组别', '新老员工', 'V数建议'].forEach(field => {
-          exportRow[field] = row[field] || '';
+      showLoading('正在准备导出文件...');
+      
+      try {
+        // 准备导出数据（跟随表头显示状态，包含新增的环比数据）
+        const exportData = appData.filteredResultData.map(row => {
+          const exportRow = {};
+          
+          // 处理基础字段
+          ['ERP账号', '姓名', '客服账号', '五级部门', '组别', '新老员工', 'V数建议'].forEach(field => {
+            if (appData.headerVisibility[field]) {
+              exportRow[field] = row[field] || '';
+            }
+          });
+          
+          // 处理每周数据
+          appData.currentWeeks.forEach(week => {
+            const weekNum = week.split('W')[1];
+            const weekFields = [
+              { field: `${week}_接待量`, label: `周${weekNum}_接待量` },
+              { field: `${week}_接待量_环比`, label: `周${weekNum}_接待量_环比(变化量)`, valueExtractor: (v) => v?.diff ?? '' },
+              { field: `${week}_接待量_环比`, label: `周${weekNum}_接待量_环比(变化率)`, valueExtractor: (v) => v ? `${(v.rate * 100).toFixed(1)}%` : '' },
+              { field: `${week}_满意度_剔除R`, label: `周${weekNum}_满意度` },
+              { field: `${week}_满意度_环比`, label: `周${weekNum}_满意度_环比(变化量)`, valueExtractor: (v) => v?.displayDiff ?? '' },
+              { field: `${week}_满意度_环比`, label: `周${weekNum}_满意度_环比(变化率)`, valueExtractor: (v) => v ? `${(v.rate * 100).toFixed(1)}%` : '' },
+              { field: `${week}_评价量_剔除R`, label: `周${weekNum}_满意度样本量` },
+              { field: `${week}_评价量_剔除R_环比`, label: `周${weekNum}_满意度样本量_环比(变化量)`, valueExtractor: (v) => v?.diff ?? '' },
+              { field: `${week}_评价量_剔除R_环比`, label: `周${weekNum}_满意度样本量_环比(变化率)`, valueExtractor: (v) => v ? `${(v.rate * 100).toFixed(1)}%` : '' },
+              { field: `${week}_满意度影响值`, label: `周${weekNum}_满意度影响值` },
+              { field: `${week}_满意度影响值_环比`, label: `周${weekNum}_满意度影响值_环比(变化量)`, valueExtractor: (v) => v?.displayDiff ?? '' },
+              { field: `${week}_满意度影响值_环比`, label: `周${weekNum}_满意度影响值_环比(变化率)`, valueExtractor: (v) => v ? `${(v.rate * 100).toFixed(1)}%` : '' },
+              { field: `${week}_解决率_剔除R`, label: `周${weekNum}_解决率` },
+              { field: `${week}_解决率_环比`, label: `周${weekNum}_解决率_环比(变化量)`, valueExtractor: (v) => v?.displayDiff ?? '' },
+              { field: `${week}_解决率_环比`, label: `周${weekNum}_解决率_环比(变化率)`, valueExtractor: (v) => v ? `${(v.rate * 100).toFixed(1)}%` : '' },
+              { field: `${week}_解决率总评价量_剔除R`, label: `周${weekNum}_解决率样本量` },
+              { field: `${week}_解决率总评价量_剔除R_环比`, label: `周${weekNum}_解决率样本量_环比(变化量)`, valueExtractor: (v) => v?.diff ?? '' },
+              { field: `${week}_解决率总评价量_剔除R_环比`, label: `周${weekNum}_解决率样本量_环比(变化率)`, valueExtractor: (v) => v ? `${(v.rate * 100).toFixed(1)}%` : '' },
+              { field: `${week}_解决率影响值`, label: `周${weekNum}_解决率影响值` },
+              { field: `${week}_解决率影响值_环比`, label: `周${weekNum}_解决率影响值_环比(变化量)`, valueExtractor: (v) => v?.displayDiff ?? '' },
+              { field: `${week}_解决率影响值_环比`, label: `周${weekNum}_解决率影响值_环比(变化率)`, valueExtractor: (v) => v ? `${(v.rate * 100).toFixed(1)}%` : '' }
+            ];
+            
+            weekFields.forEach(({ field, label, valueExtractor }) => {
+              if (appData.headerVisibility[field]) {
+                // 影响值导出原始12位值，其他字段保持原样
+                let value = row[field];
+                if (valueExtractor) {
+                  value = valueExtractor(value);
+                } else if (field.includes('影响值') && value !== undefined) {
+                  value = value; // 原始12位值
+                } else {
+                  value = value || '';
+                }
+                
+                exportRow[label] = value;
+              }
+            });
+          });
+          
+          return exportRow;
         });
         
-        // 处理每周数据，去掉原始值字段，只保留展示字段
-        appData.currentWeeks.forEach(week => {
-          const weekNum = week.split('W')[1];
-          exportRow[`周${weekNum}_接待量`] = row[`${week}_接待量`] || '';
-          exportRow[`周${weekNum}_满意度`] = row[`${week}_满意度_剔除R`] || '';
-          exportRow[`周${weekNum}_满意度影响值`] = row[`${week}_满意度影响值`] || '';
-          exportRow[`周${weekNum}_解决率`] = row[`${week}_解决率_剔除R`] || '';
-          exportRow[`周${weekNum}_解决率影响值`] = row[`${week}_解决率影响值`] || '';
-        });
         
-        return exportRow;
-      });
-      
-      // 创建工作簿并导出
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, '绩效分析结果');
-      
-      const date = new Date();
-      const fileName = `绩效分析结果_${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}.xlsx`;
-      
-      XLSX.writeFile(workbook, fileName);
-      showNotification('筛选后数据导出成功', 'success');
+        // 创建工作簿并导出
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, '绩效分析结果');
+        
+        const date = new Date();
+        const fileName = `绩效分析结果_${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}.xlsx`;
+        
+        XLSX.writeFile(workbook, fileName);
+        showNotification('筛选后数据导出成功，包含环比数据', 'success');
+      } catch (error) {
+        console.error('导出数据失败：', error);
+        showNotification('文件导出失败，请重试', 'error');
+      } finally {
+        hideLoading();
+      }
     }
 
     // 显示通知
@@ -1441,10 +2209,11 @@
         notification.classList.remove('translate-y-20', 'opacity-0');
       }, 10);
       
-      // 3秒后隐藏
+      // 3秒后隐藏（错误信息显示5秒）
+      const duration = type === 'error' ? 5000 : 3000;
       setTimeout(() => {
         notification.classList.add('translate-y-20', 'opacity-0');
-      }, 3000);
+      }, duration);
     }
 
     // 初始化应用
