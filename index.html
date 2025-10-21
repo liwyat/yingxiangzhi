@@ -2499,7 +2499,7 @@
       const headers = ['五级部门', '组别'];
       
       // 按周降序（最新的周在前面）
-      const sortedWeeks = [...appData.currentWeeks].sort((a, b) => b.localeCompare(a));
+      const sortedWeeks = [...appData.currentWeeks].sort((a, b) => a.localeCompare(b));
       
       sortedWeeks.forEach(week => {
         headers.push(`${week}小组接待量`);
