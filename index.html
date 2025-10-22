@@ -74,18 +74,31 @@
         @apply text-danger font-medium;
       }
       .sticky-column {
-        position: sticky;
-        left: 0;
-        z-index: 10;
-        background-color: inherit;
-      }
-      .sticky-column-1 { left: 0; }
-      .sticky-column-2 { left: 8rem; } /* ERP账号宽度 */
-      .sticky-column-3 { left: 16rem; } /* 姓名宽度 */
-      .sticky-column-4 { left: 24rem; } /* 客服账号宽度 */
-      .sticky-column-5 { left: 32rem; } /* 五级部门宽度 */
-      .sticky-column-6 { left: 40rem; } /* 组别宽度 */
-      .sticky-column-7 { left: 48rem; } /* 新老员工宽度 */
+            position: sticky !important;
+            left: 0;
+            z-index: 10;
+            background-color: #F9FAFB;
+            border-right: 1px solid #E5E7EB;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.1);
+            min-width: 8rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+          /* 直接使用固定宽度计算，避免变量计算问题 */
+          .sticky-column-1 { left: 0; }
+          .sticky-column-2 { left: 8rem; }
+          .sticky-column-3 { left: 16rem; }
+          .sticky-column-4 { left: 24rem; }
+          .sticky-column-5 { left: 32rem; }
+          .sticky-column-6 { left: 40rem; }
+          .sticky-column-7 { left: 48rem; }
+          /* 为内容区域的sticky列添加样式 */
+          #resultTableBody td.sticky-column {
+            background-color: white;
+            z-index: 5;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+          }
     }
   </style>
 </head>
@@ -357,14 +370,90 @@
       </div>
       
       <!-- 表格容器 -->
-      <div class="overflow-x-auto scrollbar-thin" style="max-height: 600px; position: relative;">
+      <div class="overflow-x-auto overflow-y-auto scrollbar-thin" style="max-height: 600px; position: relative;">
         <table class="min-w-full divide-y divide-gray-200">
-          <thead class="sticky top-0 bg-gray-50 z-10">
+          <thead>
             <tr id="resultTableHeader">
               <!-- 表头将通过JS动态生成 -->
             </tr>
           </thead>
           <tbody id="resultTableBody" class="bg-white divide-y divide-gray-200">
+          <style>
+            /* 加强表头和固定列的不透明性 */
+            #resultTableHeader th {
+              position: sticky !important;
+              background-color: #F9FAFB !important;
+              border-collapse: separate !important;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            }
+            
+            /* 确保表格内容不会穿透表头 */
+            #resultTableBody {
+              position: relative;
+              z-index: 1;
+            }
+            
+            #resultTableBody td {
+              background-color: white !important;
+              position: relative;
+              z-index: 1;
+            }
+            
+            #resultTableBody tr:hover td {
+              background-color: #F9FAFB !important;
+            }
+            
+            /* 修复表头与内容的z-index层级关系 */
+            .sticky-column {
+              position: sticky;
+              background-color: #F9FAFB !important;
+              z-index: 10 !important;
+              box-shadow: 2px 0 4px rgba(0,0,0,0.1);
+              overflow: visible;
+              transition: box-shadow 0.2s ease;
+            }
+            
+            /* 为内容单元格也添加相同的sticky效果，确保完全对齐 */
+            #resultTableBody td.sticky-column {
+              position: sticky;
+              background-color: white !important;
+              z-index: 5 !important;
+              box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+            }
+            
+            /* 确保表格布局稳定 */
+            table {
+              table-layout: fixed;
+              width: 100%;
+              position: relative;
+            }
+            
+            /* 为表头单元格添加最小宽度，防止压缩 */
+            #resultTableHeader th {
+              min-width: 8rem;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              position: sticky !important;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            }
+            
+            /* 确保表格容器正确定位 */
+            .overflow-x-auto {
+              position: relative;
+            }
+            
+            /* 修复表头和内容之间的堆叠顺序 */
+            #resultTableHeader {
+              position: relative;
+              z-index: 20;
+            }
+            
+            #resultTableBody {
+              position: relative;
+              z-index: 1;
+            }
+          </style>
             <!-- 表格内容将通过JS动态生成 -->
           </tbody>
         </table>
@@ -426,7 +515,7 @@
       <!-- 表格容器 -->
       <div class="overflow-x-auto scrollbar-thin" style="max-height: 600px; position: relative;">
         <table class="min-w-full divide-y divide-gray-200">
-          <thead class="sticky top-0 bg-gray-50 z-10">
+          <thead>
             <tr id="groupReportTableHeader">
               <!-- 表头将通过JS动态生成 -->
             </tr>
@@ -1891,6 +1980,37 @@
       }
     }
 
+    // 更新sticky列位置的函数
+    function updateStickyColumnPositions() {
+      // 获取表头和内容的sticky列
+      const headerStickyColumns = document.querySelectorAll('#resultTableHeader th.sticky-column');
+      
+      // 为每个sticky列设置CSS变量，动态调整位置
+      headerStickyColumns.forEach((col, index) => {
+        // 获取前一列的宽度和位置，计算当前列的left值
+        let leftPosition = 0;
+        if (index > 0) { // 从第二列开始计算
+          leftPosition = 0;
+          // 累加前面所有列的宽度
+          for (let i = 0; i < index; i++) {
+            leftPosition += headerStickyColumns[i].offsetWidth;
+          }
+        }
+        
+        // 设置CSS变量，用于实际列的定位
+        document.documentElement.style.setProperty(`--sticky-col-${index+1}`, `${leftPosition}px`);
+        
+        // 同时直接更新所有内容行的对应sticky列位置
+        const contentColumns = document.querySelectorAll(`#resultTableBody td.sticky-column-${index+1}`);
+        contentColumns.forEach(contentCol => {
+          contentCol.style.left = `${leftPosition}px`;
+        });
+      });
+    }
+    
+    // 窗口大小改变或表格滚动时重新计算
+    window.addEventListener('resize', updateStickyColumnPositions);
+    
     // 显示结果数据（基于核心字段组的可见性）
     let showAllWeeks = false;
     function displayResultData(weeks) {
@@ -1924,12 +2044,14 @@
       
       // 生成表头（基于核心字段组的可见性）
       let headerHtml = '';
+      // 清空表头内容，确保重新渲染
+      elements.resultTableHeader.innerHTML = '';
       
       // 处理基础信息组
       const baseGroup = appData.coreFieldGroups.find(g => g.key === 'base');
       if (baseGroup && appData.headerVisibility[baseGroup.key]) {
         baseGroup.fields.forEach((field, index) => {
-          headerHtml += `<th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap sticky-column sticky-column-${index + 1} bg-gray-50">${field}</th>`;
+          headerHtml += `<th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap sticky top-0 sticky-column sticky-column-${index + 1} border-r border-gray-200 shadow-md" style="z-index: 100; background-color: #F9FAFB !important; border-collapse: separate; min-width: 8rem; position: sticky !important; box-shadow: 0 2px 4px rgba(0,0,0,0.05), 2px 0 4px rgba(0,0,0,0.05);">${field}</th>`;
         });
       }
       
@@ -1945,7 +2067,7 @@
           .forEach(group => {
             const field = group.fieldTemplate.replace('${week}', week);
             headerHtml += `
-              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass}" data-week="${week}">
+              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${weekClass} sticky top-0 shadow-md" data-week="${week}" style="z-index: 50; background-color: #F9FAFB !important; border-collapse: separate;">
                 ${group.key.includes('环比') ? '环比' : `周${weekNum}_${group.label}`}
               </th>
             `;
@@ -1964,7 +2086,7 @@
         if (baseGroup && appData.headerVisibility[baseGroup.key]) {
           baseGroup.fields.forEach((field, index) => {
             let cellContent = row[field] || '-';
-            let cellClass = `px-3 py-2 text-sm whitespace-nowrap sticky-column sticky-column-${index + 1}`;
+            let cellClass = `px-3 py-2 text-sm whitespace-nowrap sticky-column sticky-column-${index + 1} bg-white z-1`;
             
             // 为V数建议添加不同的颜色
             if (field === 'V数建议') {
@@ -2126,6 +2248,9 @@
       
       // 更新切换按钮文本
       updateToggleButtonText();
+      
+      // 在下一个渲染周期更新sticky列位置，确保表格内容已完全渲染
+      setTimeout(updateStickyColumnPositions, 0);
     }
 
     // 更新切换按钮文本
@@ -2599,9 +2724,16 @@
       elements.groupReportTableHeader.innerHTML = '';
       
       // 添加表头单元格
-      headers.forEach(headerText => {
+      headers.forEach((headerText, index) => {
         const th = document.createElement('th');
-        th.className = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap';
+        // 为所有表头添加sticky top-0确保上下滚动时表头固定
+        if (headerText === '五级部门') {
+          th.className = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap sticky top-0 left-0 bg-gray-50 z-20 border-r border-gray-200';
+        } else if (headerText === '组别') {
+          th.className = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap sticky top-0 left-[160px] bg-gray-50 z-20 border-r border-gray-200';
+        } else {
+          th.className = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap sticky top-0 bg-gray-50 z-10';
+        }
         th.textContent = headerText;
         elements.groupReportTableHeader.appendChild(th);
       });
@@ -2614,9 +2746,16 @@
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-gray-50';
         
-        headers.forEach(header => {
-          const td = document.createElement('td');
-          td.className = 'px-4 py-3 whitespace-nowrap text-sm';
+        headers.forEach((header, index) => {
+            const td = document.createElement('td');
+            // 为五级部门和组别列添加粘性定位
+            if (header === '五级部门') {
+              td.className = 'px-4 py-3 whitespace-nowrap text-sm sticky left-0 bg-white z-10 border-r border-gray-200';
+            } else if (header === '组别') {
+              td.className = 'px-4 py-3 whitespace-nowrap text-sm sticky left-[160px] bg-white z-10 border-r border-gray-200';
+            } else {
+              td.className = 'px-4 py-3 whitespace-nowrap text-sm';
+            }
           
           let value = groupItem[header];
           
