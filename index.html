@@ -363,7 +363,7 @@
       </div>
       
       <div class="mb-4 text-sm text-gray-500">
-        <span>显示最近 <strong id="visibleWeeksCount">5</strong> 周数据，共 <strong id="totalWeeksCount">0</strong> 周</span>
+        <span>显示最近 <strong id="visibleWeeksCount">1</strong> 周数据，共 <strong id="totalWeeksCount">0</strong> 周</span>
         <button id="toggleWeeksBtn" class="text-primary ml-2 hover:underline">
           <i class="fa fa-chevron-down mr-1"></i>展开全部
         </button>
@@ -844,7 +844,11 @@
     }
 
     // 绑定事件监听
-    function bindEventListeners() {
+      function bindEventListeners() {
+        // 切换组别报表周数据显示
+        if (elements.groupReportToggleWeeksBtn) {
+          elements.groupReportToggleWeeksBtn.addEventListener('click', toggleGroupReportWeeksDisplay);
+        }
       // 清理历史数据
       elements.clearOldDataBtn.addEventListener('click', clearOldData);
       
@@ -2013,6 +2017,8 @@
     
     // 显示结果数据（基于核心字段组的可见性）
     let showAllWeeks = false;
+    // 默认显示最新1周数据
+    const DEFAULT_VISIBLE_WEEKS = 1;
     function displayResultData(weeks) {
       // 获取解决率样本量目标值
       const resolutionSampleTarget = parseInt(elements.resolutionSampleTarget.value) || 5;
@@ -2031,7 +2037,7 @@
       
       // 更新计数显示
       elements.totalWeeksCount.textContent = weeks.length;
-      elements.visibleWeeksCount.textContent = Math.min(weeks.length, 5);
+      elements.visibleWeeksCount.textContent = Math.min(weeks.length, showAllWeeks ? weeks.length : DEFAULT_VISIBLE_WEEKS);
       
       // 获取当前页数据
       const startIndex = (appData.currentPage - 1) * appData.pageSize;
@@ -2057,7 +2063,7 @@
       
       // 处理每周的核心字段组
       weeks.forEach((week, weekIndex) => {
-        const shouldShowWeek = showAllWeeks || weekIndex >= weeks.length - 5;
+        const shouldShowWeek = showAllWeeks || weekIndex >= weeks.length - DEFAULT_VISIBLE_WEEKS;
         const weekClass = shouldShowWeek ? '' : 'hidden extra-week';
         const weekNum = week.split('W')[1];
         
@@ -2114,7 +2120,7 @@
         
         // 处理每周的核心字段组数据
         weeks.forEach((week, weekIndex) => {
-          const shouldShowWeek = showAllWeeks || weekIndex >= weeks.length - 5;
+          const shouldShowWeek = showAllWeeks || weekIndex >= weeks.length - DEFAULT_VISIBLE_WEEKS;
           const weekClass = shouldShowWeek ? '' : 'hidden extra-week';
           
           // 按核心字段组顺序生成数据单元格
@@ -2263,10 +2269,19 @@
     }
 
     // 切换周数据显示
-    function toggleWeeksDisplay() {
-      showAllWeeks = !showAllWeeks;
-      displayResultData(appData.currentWeeks);
-    }
+      function toggleWeeksDisplay() {
+        showAllWeeks = !showAllWeeks;
+        displayResultData(appData.currentWeeks);
+      }
+      
+      // 初始化组别报表的周数据显示变量
+      let groupReportShowAllWeeks = false;
+      
+      // 切换组别报表周数据显示
+      function toggleGroupReportWeeksDisplay() {
+        groupReportShowAllWeeks = !groupReportShowAllWeeks;
+        displayGroupReportData(filteredGroupReportData);
+      }
 
     // 导出结果数据（基于核心字段组的可见性）
     function exportResultData() {
@@ -2702,10 +2717,11 @@
         return bVolume - aVolume;
       });
       
-      // 生成表头
+      // 生成表头 - 默认只显示最新1周数据，除非showAllWeeks为true
       const headers = ['五级部门', '组别'];
+      let weeksToShow = showAllWeeks ? sortedWeeks : sortedWeeks.slice(-1);
       
-      sortedWeeks.forEach(week => {
+      weeksToShow.forEach(week => {
         headers.push(`${week}小组接待量`);
         headers.push(`${week}小组接待量环比`);
         headers.push(`${week}小组满意度`);
@@ -2746,7 +2762,12 @@
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-gray-50';
         
-        headers.forEach((header, index) => {
+        // 只处理要显示的表头（五级部门、组别以及最新1周的数据）
+        let headersToShow = showAllWeeks ? headers : 
+          headers.filter(h => h === '五级部门' || h === '组别' || 
+                         (sortedWeeks.length > 0 && h.includes(sortedWeeks[sortedWeeks.length - 1])));
+        
+        headersToShow.forEach((header, index) => {
             const td = document.createElement('td');
             // 为五级部门和组别列添加粘性定位
             if (header === '五级部门') {
