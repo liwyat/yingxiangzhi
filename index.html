@@ -2361,7 +2361,10 @@
           组别: groupItem.组别 
         };
         
-        appData.currentWeeks.forEach(week => {
+        // 按周排序以便计算环比
+        const sortedWeeks = [...appData.currentWeeks].sort((a, b) => a.localeCompare(b));
+        
+        sortedWeeks.forEach((week, index) => {
           const weekData = groupItem.周数据[week];
           const totals = weeklyTotals[week];
           
@@ -2393,6 +2396,74 @@
           processedGroup[`${week}小组解决率`] = resolutionRate;
           processedGroup[`${week}小组解决率样本量`] = weekData.解决率总评价量_剔除R;
           processedGroup[`${week}小组解决率影响值`] = resolutionImpact;
+          
+          // 计算与上一周的环比数据（如果不是第一周）
+          if (index > 0) {
+            const prevWeek = sortedWeeks[index - 1];
+            const prevWeekData = groupItem.周数据[prevWeek];
+            
+            // 接待量环比
+            const volumeDiff = weekData.接待量 - prevWeekData.接待量;
+            const volumeRate = prevWeekData.接待量 > 0 ? (volumeDiff / prevWeekData.接待量) : (weekData.接待量 > 0 ? 1 : 0);
+            processedGroup[`${week}小组接待量环比`] = {
+              diff: volumeDiff,
+              rate: volumeRate,
+              displayDiff: volumeDiff.toFixed(1)
+            };
+            
+            // 满意度环比
+            const prevSatisfactionRate = prevWeekData.评价量_剔除R > 0 ? (prevWeekData.满意量_剔除R / prevWeekData.评价量_剔除R * 100) : 0;
+            const satisfactionDiff = satisfactionRate - prevSatisfactionRate;
+            const satisfactionRatePercent = prevSatisfactionRate > 0 ? (satisfactionDiff / prevSatisfactionRate) : (satisfactionRate > 0 ? 1 : 0);
+            processedGroup[`${week}小组满意度环比`] = {
+              diff: satisfactionDiff,
+              rate: satisfactionRatePercent,
+              displayDiff: satisfactionDiff.toFixed(2) + '%'
+            };
+            
+            // 满意度影响值环比
+            let prevSatisfactionImpact = 0;
+            const prevTotals = weeklyTotals[prevWeek];
+            if (prevTotals && prevTotals.totalEvaluation > 0 && prevWeekData.评价量_剔除R > 0) {
+              prevSatisfactionImpact = ((prevSatisfactionRate / 100) - (satisfactionTarget / 100)) * 
+                                      (prevWeekData.评价量_剔除R / prevTotals.totalEvaluation);
+            }
+            const satisfactionImpactDiff = satisfactionImpact - prevSatisfactionImpact;
+            const satisfactionImpactRate = Math.abs(prevSatisfactionImpact) > 0 ? 
+                                          (satisfactionImpactDiff / prevSatisfactionImpact) : 
+                                          (Math.abs(satisfactionImpact) > 0 ? 1 : 0);
+            processedGroup[`${week}小组满意度影响值环比`] = {
+              diff: satisfactionImpactDiff,
+              rate: satisfactionImpactRate,
+              displayDiff: formatImpactValue(satisfactionImpactDiff)
+            };
+            
+            // 解决率环比
+            const prevResolutionRate = prevWeekData.解决率总评价量_剔除R > 0 ? (prevWeekData.已解决量_剔除R / prevWeekData.解决率总评价量_剔除R * 100) : 0;
+            const resolutionDiff = resolutionRate - prevResolutionRate;
+            const resolutionRatePercent = prevResolutionRate > 0 ? (resolutionDiff / prevResolutionRate) : (resolutionRate > 0 ? 1 : 0);
+            processedGroup[`${week}小组解决率环比`] = {
+              diff: resolutionDiff,
+              rate: resolutionRatePercent,
+              displayDiff: resolutionDiff.toFixed(2) + '%'
+            };
+            
+            // 解决率影响值环比
+            let prevResolutionImpact = 0;
+            if (prevTotals && prevTotals.totalResolutionEvaluation > 0 && prevWeekData.解决率总评价量_剔除R > 0) {
+              prevResolutionImpact = ((prevResolutionRate / 100) - (resolutionTarget / 100)) * 
+                                    (prevWeekData.解决率总评价量_剔除R / prevTotals.totalResolutionEvaluation);
+            }
+            const resolutionImpactDiff = resolutionImpact - prevResolutionImpact;
+            const resolutionImpactRate = Math.abs(prevResolutionImpact) > 0 ? 
+                                        (resolutionImpactDiff / prevResolutionImpact) : 
+                                        (Math.abs(resolutionImpact) > 0 ? 1 : 0);
+            processedGroup[`${week}小组解决率影响值环比`] = {
+              diff: resolutionImpactDiff,
+              rate: resolutionImpactRate,
+              displayDiff: formatImpactValue(resolutionImpactDiff)
+            };
+          }
         });
         
         return processedGroup;
@@ -2486,7 +2557,7 @@
     
     // 显示组别维度报表数据
     function displayGroupReportData(dataToDisplay) {
-      const data = dataToDisplay || filteredGroupReportData || [];
+      let data = dataToDisplay || filteredGroupReportData || [];
       
       if (data.length === 0) {
         elements.groupReportEmptyState.style.display = 'flex';
@@ -2495,20 +2566,33 @@
       
       elements.groupReportEmptyState.style.display = 'none';
       
+      // 获取最新的周
+      const sortedWeeks = [...appData.currentWeeks].sort((a, b) => a.localeCompare(b));
+      const latestWeek = sortedWeeks[sortedWeeks.length - 1];
+      
+      // 按最新周的小组接待量从大到小排序
+      data = data.sort((a, b) => {
+        const aVolume = a[`${latestWeek}小组接待量`] || 0;
+        const bVolume = b[`${latestWeek}小组接待量`] || 0;
+        return bVolume - aVolume;
+      });
+      
       // 生成表头
       const headers = ['五级部门', '组别'];
       
-      // 按周降序（最新的周在前面）
-      const sortedWeeks = [...appData.currentWeeks].sort((a, b) => a.localeCompare(b));
-      
       sortedWeeks.forEach(week => {
         headers.push(`${week}小组接待量`);
+        headers.push(`${week}小组接待量环比`);
         headers.push(`${week}小组满意度`);
+        headers.push(`${week}小组满意度环比`);
         headers.push(`${week}小组满意度样本量`);
         headers.push(`${week}小组满意度影响值`);
+        headers.push(`${week}小组满意度影响值环比`);
         headers.push(`${week}小组解决率`);
+        headers.push(`${week}小组解决率环比`);
         headers.push(`${week}小组解决率样本量`);
         headers.push(`${week}小组解决率影响值`);
+        headers.push(`${week}小组解决率影响值环比`);
       });
       
       // 清空表头
@@ -2538,12 +2622,28 @@
           
           if (value === undefined || value === null) {
             td.textContent = '-';
+          } else if (typeof value === 'object' && header.includes('环比')) {
+            // 格式化对象类型的环比数据（与绩效分析结果格式一致）
+            const isUp = value.diff > 0;
+            const rate = `${(value.rate * 100).toFixed(2)}%`;
+            const diffValue = value.displayDiff || value.diff.toFixed(2);
+            
+            // 设置环比颜色样式
+            const className = isUp ? 'compare-up' : (value.diff < 0 ? 'compare-down' : '');
+            
+            // 带箭头的环比显示格式：箭头+变化量 (变化率%)
+            // 为满意度环比和解决率环比的变化量添加百分号
+            let formattedDiffValue = diffValue;
+            if ((header.includes('小组满意度环比') || header.includes('小组解决率环比')) && !diffValue.includes('%')) {
+              formattedDiffValue = diffValue + '%';
+            }
+            td.innerHTML = `<span class="${className}">${isUp ? '↑' : (value.diff < 0 ? '↓' : '')}${formattedDiffValue} (${rate})</span>`;
           } else if (typeof value === 'number') {
             // 根据字段类型格式化显示
             if (header.includes('满意度') && !header.includes('样本量') && !header.includes('影响值')) {
-              td.textContent = value.toFixed(1) + '%';
+              td.textContent = value.toFixed(2) + '%';
             } else if (header.includes('解决率') && !header.includes('样本量') && !header.includes('影响值')) {
-              td.textContent = value.toFixed(1) + '%';
+              td.textContent = value.toFixed(2) + '%';
             } else if (header.includes('影响值')) {
               td.textContent = formatImpactValue(value);
               if (value > 0) {
@@ -2585,12 +2685,19 @@
           Object.keys(groupItem).forEach(key => {
             if (key !== '五级部门' && key !== '组别') {
               let value = groupItem[key];
-              if (typeof value === 'number') {
+              
+              // 处理环比数据对象（包含diff、rate和displayDiff属性）
+              if (typeof value === 'object' && value !== null && 'displayDiff' in value) {
+                // 使用displayDiff属性作为显示值，这是我们格式化后的值
+                exportRow[key] = value.displayDiff;
+              } 
+              // 处理数值类型数据
+              else if (typeof value === 'number') {
                 // 格式化数字
                 if (key.includes('满意度') && !key.includes('样本量') && !key.includes('影响值')) {
-                  exportRow[key] = value.toFixed(1) + '%';
+                  exportRow[key] = value.toFixed(2) + '%';
                 } else if (key.includes('解决率') && !key.includes('样本量') && !key.includes('影响值')) {
-                  exportRow[key] = value.toFixed(1) + '%';
+                  exportRow[key] = value.toFixed(2) + '%';
                 } else if (key.includes('影响值')) {
                   exportRow[key] = (value * 100).toFixed(5) + '%';
                 } else {
